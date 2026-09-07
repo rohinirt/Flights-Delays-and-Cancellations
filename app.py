@@ -4,7 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 
-# 1. FORCE GLOBAL LIGHT THEME AT THE CONFIG LEVEL
+# Page Configuration
 st.set_page_config(
     page_title="Chicago O'Hare (ORD) Flight Intelligence",
     page_icon="✈️",
@@ -12,41 +12,56 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Enforce light theme variables across native Streamlit components and dataframes
-st.config.set_option("theme.base", "light")
-st.config.set_option("theme.primaryColor", "#0066CC")
-st.config.set_option("theme.backgroundColor", "#f8fafc")
-st.config.set_option("theme.secondaryBackgroundColor", "#ffffff")
-st.config.set_option("theme.textColor", "#0f172a")
+# Helper function to safely convert potential NaN/None values to integers
+def safe_int(val, default=0):
+    if pd.isna(val) or val is None:
+        return default
+    return int(val)
 
-# 2. CSS OVERRIDES FOR SEGMENTED CONTROLS & SIDEBAR
+# Explicit CSS variable overrides to fix dark mode leakage
 st.markdown("""
 <style>
-    /* Global Text Fix */
-    .stApp, .stApp * {
+    /* Force Root Light Palette Variables */
+    :root {
+        --background-color: #f8fafc !important;
+        --secondary-background-color: #ffffff !important;
+        --text-color: #0f172a !important;
+    }
+
+    /* Force Main App Canvas */
+    .stApp, [data-testid="stAppViewContainer"] { 
+        background-color: #f8fafc !important; 
         color: #0f172a !important;
     }
 
-    /* Force Visible Text in Segmented Controls (Selected & Unselected) */
-    div[data-testid="stSegmentedControl"] button {
+    /* Force Dark Text on native text nodes */
+    .stApp p, .stApp span, .stApp label, .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp caption {
+        color: #0f172a !important;
+    }
+
+    /* Segmented Control Unselected & Selected State Fix */
+    div[data-testid="stSegmentedControl"] {
         background-color: #e2e8f0 !important;
+        border-radius: 8px !important;
+        padding: 4px !important;
+    }
+    div[data-testid="stSegmentedControl"] button {
+        background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
     }
-    div[data-testid="stSegmentedControl"] button p,
-    div[data-testid="stSegmentedControl"] button span {
+    div[data-testid="stSegmentedControl"] button * {
         color: #0f172a !important;
         font-weight: 600 !important;
     }
     div[data-testid="stSegmentedControl"] button[aria-selected="true"] {
         background-color: #0066CC !important;
     }
-    div[data-testid="stSegmentedControl"] button[aria-selected="true"] p,
-    div[data-testid="stSegmentedControl"] button[aria-selected="true"] span {
+    div[data-testid="stSegmentedControl"] button[aria-selected="true"] * {
         color: #ffffff !important;
         font-weight: 700 !important;
     }
 
-    /* Metric Cards Fix */
+    /* KPI Metrics Styling */
     div[data-testid="stMetric"] {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
@@ -62,7 +77,7 @@ st.markdown("""
         font-weight: 700 !important;
     }
 
-    /* Custom Flight Cards */
+    /* Card Containers */
     .flight-card-container {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
@@ -74,22 +89,11 @@ st.markdown("""
     .flight-card-delay {
         border-left-color: #D00000 !important;
     }
-    .card-title { 
-        font-size: 1.05rem !important; 
-        font-weight: 700 !important; 
-        color: #0A192F !important; 
-    }
-    .card-subtitle { 
-        font-size: 0.85rem !important; 
-        color: #475569 !important; 
-    }
-    .card-metric { 
-        font-size: 0.9rem !important; 
-        font-weight: 600 !important; 
-        color: #1e293b !important; 
-    }
+    .card-title { font-size: 1.05rem !important; font-weight: 700 !important; color: #0A192F !important; }
+    .card-subtitle { font-size: 0.85rem !important; color: #475569 !important; }
+    .card-metric { font-size: 0.9rem !important; font-weight: 600 !important; color: #1e293b !important; }
 
-    /* Sidebar Theme Isolation */
+    /* Dark Sidebar Isolation */
     section[data-testid="stSidebar"] {
         background-color: #0A192F !important;
     }
@@ -119,8 +123,8 @@ except Exception as e:
     st.error(f"Error loading CSV dataset: {e}. Ensure 'flights_2022.csv' is in root directory.")
     st.stop()
 
-# Helper function to apply dark-text layout formatting to Plotly charts
-def format_plotly_figure(fig):
+# Explicit Plotly Theme Applicator
+def apply_light_plotly_theme(fig):
     fig.update_layout(
         template="plotly_white",
         font=dict(color="#0f172a", family="sans-serif"),
@@ -158,7 +162,7 @@ def create_kpi_bar_chart(data, x_col, y_col, color="#0066CC"):
     )
     return fig
 
-# Sidebar Global Navigation & Filters
+# Sidebar Filters
 st.sidebar.title("✈️ ORD Analytics")
 st.sidebar.caption("Chicago O'Hare International Airport")
 st.sidebar.markdown("---")
@@ -194,8 +198,8 @@ if page == "Arrivals Intelligence":
     kpi_df = conn.execute(kpi_query).df()
     total_flights, on_time_pct, avg_delay, total_cancelled, total_diverted = kpi_df.iloc[0]
 
-    longest_dist_row = conn.execute(f'SELECT "FL_NUMBER", "ORIGIN", "DISTANCE" FROM flights WHERE "DEST" = \'ORD\' {airline_filter} ORDER BY "DISTANCE" DESC LIMIT 1').df().iloc[0]
-    longest_time_row = conn.execute(f'SELECT "FL_NUMBER", "ORIGIN", "ELAPSED_TIME" FROM flights WHERE "DEST" = \'ORD\' {airline_filter} ORDER BY "ELAPSED_TIME" DESC LIMIT 1').df().iloc[0]
+    longest_dist_row = conn.execute(f'SELECT "FL_NUMBER", "ORIGIN", COALESCE("DISTANCE", 0) FROM flights WHERE "DEST" = \'ORD\' {airline_filter} ORDER BY "DISTANCE" DESC LIMIT 1').df().iloc[0]
+    longest_time_row = conn.execute(f'SELECT "FL_NUMBER", "ORIGIN", COALESCE("ELAPSED_TIME", 0) FROM flights WHERE "DEST" = \'ORD\' {airline_filter} ORDER BY "ELAPSED_TIME" DESC LIMIT 1').df().iloc[0]
 
     monthly_trend = conn.execute(f"""
         SELECT 
@@ -211,7 +215,7 @@ if page == "Arrivals Intelligence":
     c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
     
     with c1:
-        st.metric("Total Arrivals", f"{int(total_flights or 0):,}")
+        st.metric("Total Arrivals", f"{safe_int(total_flights):,}")
         st.plotly_chart(create_kpi_bar_chart(monthly_trend, 'month', 'flights', '#0066CC'), use_container_width=True)
     with c2:
         st.metric("On-Time %", f"{(on_time_pct or 0):.1f}%")
@@ -220,13 +224,13 @@ if page == "Arrivals Intelligence":
         st.metric("Avg Delay", f"{(avg_delay or 0):.1f}m")
         st.plotly_chart(create_kpi_bar_chart(monthly_trend, 'month', 'delay', '#D00000'), use_container_width=True)
     with c4:
-        st.metric("Cancelled", f"{int(total_cancelled or 0):,}")
+        st.metric("Cancelled", f"{safe_int(total_cancelled):,}")
     with c5:
-        st.metric("Diverted", f"{int(total_diverted or 0):,}")
+        st.metric("Diverted", f"{safe_int(total_diverted):,}")
     with c6:
-        st.metric("Max Distance", f"{int(longest_dist_row.iloc[2])} mi", f"FL {int(longest_dist_row.iloc[0])} ({longest_dist_row.iloc[1]})")
+        st.metric("Max Distance", f"{safe_int(longest_dist_row.iloc[2])} mi", f"FL {safe_int(longest_dist_row.iloc[0])} ({longest_dist_row.iloc[1]})")
     with c7:
-        st.metric("Max Flight Time", f"{int(longest_time_row.iloc[2])} min", f"FL {int(longest_time_row.iloc[0])} ({longest_time_row.iloc[1]})")
+        st.metric("Max Flight Time", f"{safe_int(longest_time_row.iloc[2])} min", f"FL {safe_int(longest_time_row.iloc[0])} ({longest_time_row.iloc[1]})")
 
     st.markdown("---")
 
@@ -262,7 +266,7 @@ if page == "Arrivals Intelligence":
             title=f"Top 5 Airlines by {measure}"
         )
         fig_air.update_traces(marker_color='#0066CC')
-        fig_air = format_plotly_figure(fig_air)
+        fig_air = apply_light_plotly_theme(fig_air)
         fig_air.update_layout(yaxis=dict(autorange="reversed"), margin=dict(l=20, r=20, t=40, b=20))
         st.plotly_chart(fig_air, use_container_width=True)
 
@@ -279,7 +283,7 @@ if page == "Arrivals Intelligence":
             title=f"Top 5 Origin Hubs by {measure}"
         )
         fig_orig.update_traces(marker_color='#0A192F')
-        fig_orig = format_plotly_figure(fig_orig)
+        fig_orig = apply_light_plotly_theme(fig_orig)
         fig_orig.update_layout(yaxis=dict(autorange="reversed"), margin=dict(l=20, r=20, t=40, b=20))
         st.plotly_chart(fig_orig, use_container_width=True)
 
@@ -294,7 +298,13 @@ if page == "Arrivals Intelligence":
         sort_col = '"DISTANCE"' if card_toggle == "Distance (Miles)" else '"ELAPSED_TIME"'
         
         longest_df = conn.execute(f"""
-            SELECT DISTINCT "FL_NUMBER", "AIRLINE_CODE", "ORIGIN", "ORIGIN_CITY", "DISTANCE", "ELAPSED_TIME"
+            SELECT DISTINCT 
+                "FL_NUMBER", 
+                "AIRLINE_CODE", 
+                "ORIGIN", 
+                "ORIGIN_CITY", 
+                COALESCE("DISTANCE", 0) AS distance, 
+                COALESCE("ELAPSED_TIME", 0) AS elapsed_time
             FROM flights WHERE "DEST" = 'ORD' {airline_filter}
             ORDER BY {sort_col} DESC LIMIT 5
         """).df()
@@ -302,11 +312,11 @@ if page == "Arrivals Intelligence":
         for idx, row in longest_df.iterrows():
             st.markdown(f"""
             <div class="flight-card-container">
-                <div class="card-title">Flight #{int(row.iloc[0])} — {row.iloc[1]}</div>
+                <div class="card-title">Flight #{safe_int(row.iloc[0])} — {row.iloc[1]}</div>
                 <div class="card-subtitle">Origin: <b style="color:#0A192F;">{row.iloc[2]}</b> ({row.iloc[3]})</div>
                 <div style="display: flex; justify-content: space-between;">
-                    <span class="card-metric">📏 Distance: <b>{int(row.iloc[4])} mi</b></span>
-                    <span class="card-metric">⏱️ Time: <b>{int(row.iloc[5] or 0)} mins</b></span>
+                    <span class="card-metric">📏 Distance: <b>{safe_int(row['distance'])} mi</b></span>
+                    <span class="card-metric">⏱️ Time: <b>{safe_int(row['elapsed_time'])} mins</b></span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -317,7 +327,13 @@ if page == "Arrivals Intelligence":
         delay_sort_col = '"ARR_DELAY"' if delay_toggle == "Arrival Delay" else '"DELAY_DUE_CARRIER"'
 
         delayed_df = conn.execute(f"""
-            SELECT "FL_NUMBER", "AIRLINE_CODE", "ORIGIN", "ORIGIN_CITY", "ARR_DELAY", "DELAY_DUE_CARRIER"
+            SELECT 
+                "FL_NUMBER", 
+                "AIRLINE_CODE", 
+                "ORIGIN", 
+                "ORIGIN_CITY", 
+                COALESCE("ARR_DELAY", 0) AS arr_delay, 
+                COALESCE("DELAY_DUE_CARRIER", 0) AS carrier_delay
             FROM flights WHERE "DEST" = 'ORD' {airline_filter}
             ORDER BY {delay_sort_col} DESC LIMIT 5
         """).df()
@@ -325,11 +341,11 @@ if page == "Arrivals Intelligence":
         for idx, row in delayed_df.iterrows():
             st.markdown(f"""
             <div class="flight-card-container flight-card-delay">
-                <div class="card-title">Flight #{int(row.iloc[0])} — {row.iloc[1]}</div>
+                <div class="card-title">Flight #{safe_int(row.iloc[0])} — {row.iloc[1]}</div>
                 <div class="card-subtitle">Origin: <b style="color:#0A192F;">{row.iloc[2]}</b> ({row.iloc[3]})</div>
                 <div style="display: flex; justify-content: space-between;">
-                    <span class="card-metric" style="color: #D00000 !important;">🔴 Arr Delay: <b>{int(row.iloc[4] or 0)} mins</b></span>
-                    <span class="card-metric">🏢 Carrier Delay: <b>{int(row.iloc[5] or 0)} mins</b></span>
+                    <span class="card-metric" style="color: #D00000 !important;">🔴 Arr Delay: <b>{safe_int(row['arr_delay'])} mins</b></span>
+                    <span class="card-metric">🏢 Carrier Delay: <b>{safe_int(row['carrier_delay'])} mins</b></span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -370,7 +386,7 @@ if page == "Arrivals Intelligence":
             labels=dict(x="Hour of Day (24h)", y=y_label, color="Flights"),
             color_continuous_scale="Blues"
         )
-        fig_heat = format_plotly_figure(fig_heat)
+        fig_heat = apply_light_plotly_theme(fig_heat)
         st.plotly_chart(fig_heat, use_container_width=True)
 
     with c_delay:
@@ -391,7 +407,7 @@ if page == "Arrivals Intelligence":
             hole=0.45,
             color_discrete_sequence=['#0066CC', '#0A192F', '#D00000', '#64748B', '#38BDF8']
         )
-        fig_pie = format_plotly_figure(fig_pie)
+        fig_pie = apply_light_plotly_theme(fig_pie)
         st.plotly_chart(fig_pie, use_container_width=True)
 
     st.markdown("---")
@@ -418,7 +434,7 @@ if page == "Arrivals Intelligence":
         node=dict(pad=15, thickness=20, line=dict(color="black", width=0.5), label=labels, color="#0066CC"),
         link=dict(source=sources, target=targets, value=values, color="rgba(0, 102, 204, 0.2)")
     )])
-    fig_sankey = format_plotly_figure(fig_sankey)
+    fig_sankey = apply_light_plotly_theme(fig_sankey)
     fig_sankey.update_layout(height=350)
     st.plotly_chart(fig_sankey, use_container_width=True)
 
