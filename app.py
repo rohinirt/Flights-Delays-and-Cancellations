@@ -139,7 +139,7 @@ def apply_light_plotly_theme(fig):
     )
     return fig
 
-# KPI Monthly Bar Chart Helper (Image 1 Style)
+# KPI Monthly Bar Chart Helper
 def create_monthly_kpi_chart(data, x_col, y_col, bar_color="#0066CC"):
     fig = px.bar(data, x=x_col, y=y_col)
     month_labels = {1:'J', 2:'F', 3:'M', 4:'A', 5:'M', 6:'J', 7:'J', 8:'A', 9:'S', 10:'O', 11:'N', 12:'D'}
@@ -178,7 +178,7 @@ if selected_airline:
     formatted_airlines = "', '".join(selected_airline)
     airline_filter = f"AND \"AIRLINE_CODE\" IN ('{formatted_airlines}')"
 
-# Helper function to render Google Flight Card (Image 3 Match)
+# Helper function to render Google Flight Card
 def render_flight_card(row):
     origin_code = row['ORIGIN']
     origin_city = row['ORIGIN_CITY']
@@ -276,7 +276,7 @@ if page == "Arrivals Intelligence":
         GROUP BY month ORDER BY month
     """).df()
 
-    # 1. KPI Cards Row (Image 1 Style)
+    # 1. KPI Cards Row
     c1, c2, c3, c4, c5 = st.columns(5)
     
     with c1:
@@ -286,7 +286,7 @@ if page == "Arrivals Intelligence":
                 <div style="font-size: 1.6rem; font-weight: 800; color: #0A192F; margin-top: 4px;">{safe_int(total_flights):,}</div>
             </div>
         """, unsafe_allow_html=True)
-        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#0066CC'), use_container_width=True)
+        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#0066CC'), width="stretch")
 
     with c2:
         st.markdown(f"""
@@ -295,7 +295,7 @@ if page == "Arrivals Intelligence":
                 <div style="font-size: 1.6rem; font-weight: 800; color: #10B981; margin-top: 4px;">{(on_time_pct or 0):.1f}%</div>
             </div>
         """, unsafe_allow_html=True)
-        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'on_time', '#10B981'), use_container_width=True)
+        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'on_time', '#10B981'), width="stretch")
 
     with c3:
         st.markdown(f"""
@@ -304,7 +304,7 @@ if page == "Arrivals Intelligence":
                 <div style="font-size: 1.6rem; font-weight: 800; color: #D00000; margin-top: 4px;">{(avg_delay or 0):.1f}m</div>
             </div>
         """, unsafe_allow_html=True)
-        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'delay', '#D00000'), use_container_width=True)
+        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'delay', '#D00000'), width="stretch")
 
     with c4:
         st.markdown(f"""
@@ -313,7 +313,7 @@ if page == "Arrivals Intelligence":
                 <div style="font-size: 1.6rem; font-weight: 800; color: #0A192F; margin-top: 4px;">{safe_int(total_cancelled):,}</div>
             </div>
         """, unsafe_allow_html=True)
-        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#64748B'), use_container_width=True)
+        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#64748B'), width="stretch")
 
     with c5:
         st.markdown(f"""
@@ -322,7 +322,7 @@ if page == "Arrivals Intelligence":
                 <div style="font-size: 1.6rem; font-weight: 800; color: #0A192F; margin-top: 4px;">{safe_int(total_diverted):,}</div>
             </div>
         """, unsafe_allow_html=True)
-        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#38BDF8'), use_container_width=True)
+        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#38BDF8'), width="stretch")
 
     st.markdown("---")
 
@@ -359,7 +359,7 @@ if page == "Arrivals Intelligence":
         fig_air.update_traces(marker_color='#0066CC')
         fig_air = apply_light_plotly_theme(fig_air)
         fig_air.update_layout(yaxis=dict(autorange="reversed"), margin=dict(l=20, r=20, t=40, b=20))
-        st.plotly_chart(fig_air, use_container_width=True)
+        st.plotly_chart(fig_air, width="stretch")
 
     with col_orig:
         orig_df = conn.execute(f"""
@@ -376,11 +376,11 @@ if page == "Arrivals Intelligence":
         fig_orig.update_traces(marker_color='#0A192F')
         fig_orig = apply_light_plotly_theme(fig_orig)
         fig_orig.update_layout(yaxis=dict(autorange="reversed"), margin=dict(l=20, r=20, t=40, b=20))
-        st.plotly_chart(fig_orig, use_container_width=True)
+        st.plotly_chart(fig_orig, width="stretch")
 
     st.markdown("---")
 
-    # 3. Top 5 Flight Cards (Image 3 Style)
+    # 3. Top 5 Flight Cards
     col_longest, col_delayed = st.columns(2)
 
     with col_longest:
@@ -466,7 +466,7 @@ if page == "Arrivals Intelligence":
             color_continuous_scale="Blues"
         )
         fig_heat = apply_light_plotly_theme(fig_heat)
-        st.plotly_chart(fig_heat, use_container_width=True)
+        st.plotly_chart(fig_heat, width="stretch")
 
     with c_delay:
         st.subheader("Arrival Delay Drivers")
@@ -480,14 +480,21 @@ if page == "Arrivals Intelligence":
             FROM flights WHERE "DEST" = 'ORD' {airline_filter}
         """).df()
         
+        # Fixed Plotly Pie Chart Call by providing explicit DataFrame
+        delay_summary_df = pd.DataFrame({
+            'Category': delay_df.columns.tolist(),
+            'Minutes': delay_df.iloc[0].fillna(0).values
+        })
+        
         fig_pie = px.pie(
-            values=delay_df.iloc[0].fillna(0).values, 
-            names=delay_df.columns.tolist(),
+            delay_summary_df,
+            names='Category',
+            values='Minutes',
             hole=0.45,
             color_discrete_sequence=['#0066CC', '#0A192F', '#D00000', '#64748B', '#38BDF8']
         )
         fig_pie = apply_light_plotly_theme(fig_pie)
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, width="stretch")
 
     st.markdown("---")
 
@@ -515,7 +522,7 @@ if page == "Arrivals Intelligence":
     )])
     fig_sankey = apply_light_plotly_theme(fig_sankey)
     fig_sankey.update_layout(height=350)
-    st.plotly_chart(fig_sankey, use_container_width=True)
+    st.plotly_chart(fig_sankey, width="stretch")
 
     st.markdown("---")
 
@@ -526,7 +533,7 @@ if page == "Arrivals Intelligence":
         FROM flights WHERE "DEST" = 'ORD' {airline_filter}
         ORDER BY "FL_DATE" DESC LIMIT 100
     """).df()
-    st.dataframe(table_df, use_container_width=True, height=300)
+    st.dataframe(table_df, width="stretch", height=300)
 
 # ==================== OTHER PAGES ====================
 elif page == "Departures Intelligence":
