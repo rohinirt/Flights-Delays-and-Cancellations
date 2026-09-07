@@ -49,12 +49,16 @@ st.markdown("""
         color: #0f172a !important;
     }
 
-    /* Reduce vertical padding in Streamlit borders to keep KPI cards compact */
-    div[data-testid="stVerticalBlock"] > div[data-testid="stBlock"] {
-        padding: 4px 8px !important;
+    /* Solid KPI Card Wrapper for Column Containers */
+    div[data-testid="stColumn"] > div {
+        background-color: #FFFFFF !important;
+        border: 1px solid #CBD5E1 !important;
+        border-radius: 10px !important;
+        padding: 12px 8px 4px 8px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
     }
 
-    /* Segmented Control Fix */
+    /* Segmented Control Styling */
     div[data-testid="stSegmentedControl"] {
         background-color: #e2e8f0 !important;
         border-radius: 8px !important;
@@ -218,23 +222,24 @@ def create_monthly_kpi_chart(data, x_col, y_col, bar_color="#0066CC"):
     fig = px.bar(data, x='month_code', y=y_col)
     fig.update_traces(
         marker_color=bar_color, 
-        opacity=0.9, 
+        opacity=0.95, 
         hovertemplate="%{x}: %{y:,.0f}<extra></extra>"
     )
     fig.update_layout(
-        margin=dict(l=0, r=0, t=5, b=0),
-        height=75,
+        margin=dict(l=2, r=2, t=2, b=18),
+        height=70,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(
             type='category',
             categoryorder='array',
             categoryarray=['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'],
-            tickfont=dict(size=10, color='#64748B'),
+            tickfont=dict(size=9, color='#475569', weight='bold'),
             showgrid=False,
             zeroline=False,
             fixedrange=True,
-            title=""
+            title="",
+            showline=False
         ),
         yaxis=dict(visible=False, showgrid=False, fixedrange=True)
     )
@@ -287,58 +292,53 @@ if page == "Arrivals Intelligence":
         GROUP BY month ORDER BY month
     """).df()
 
-    # 1. Single Card Row for KPI Metrics (Image 1 Style)
+    # 1. Solid Color KPI Cards with Monthly Bar Charts
     c1, c2, c3, c4, c5 = st.columns(5)
     
     with c1:
-        with st.container(border=True):
-            st.markdown(f"""
-                <div style="text-align: center;">
-                    <div style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase;">TOTAL ARRIVALS</div>
-                    <div style="font-size: 1.5rem; font-weight: 800; color: #0A192F; margin: 2px 0;">{safe_int(total_flights):,}</div>
-                </div>
-            """, unsafe_allow_html=True)
-            st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#0066CC'), use_container_width=True, config={'displayModeBar': False})
+        st.markdown(f"""
+            <div style="text-align: center;">
+                <div style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">TOTAL ARRIVALS</div>
+                <div style="font-size: 1.5rem; font-weight: 800; color: #0A192F; margin: 2px 0 0 0;">{safe_int(total_flights):,}</div>
+            </div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#0066CC'), use_container_width=True, config={'displayModeBar': False})
 
     with c2:
-        with st.container(border=True):
-            st.markdown(f"""
-                <div style="text-align: center;">
-                    <div style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase;">ON-TIME %</div>
-                    <div style="font-size: 1.5rem; font-weight: 800; color: #10B981; margin: 2px 0;">{(on_time_pct or 0):.1f}%</div>
-                </div>
-            """, unsafe_allow_html=True)
-            st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'on_time', '#10B981'), use_container_width=True, config={'displayModeBar': False})
+        st.markdown(f"""
+            <div style="text-align: center;">
+                <div style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">ON-TIME %</div>
+                <div style="font-size: 1.5rem; font-weight: 800; color: #10B981; margin: 2px 0 0 0;">{(on_time_pct or 0):.1f}%</div>
+            </div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'on_time', '#10B981'), use_container_width=True, config={'displayModeBar': False})
 
     with c3:
-        with st.container(border=True):
-            st.markdown(f"""
-                <div style="text-align: center;">
-                    <div style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase;">AVG DELAY</div>
-                    <div style="font-size: 1.5rem; font-weight: 800; color: #D00000; margin: 2px 0;">{(avg_delay or 0):.1f}m</div>
-                </div>
-            """, unsafe_allow_html=True)
-            st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'delay', '#D00000'), use_container_width=True, config={'displayModeBar': False})
+        st.markdown(f"""
+            <div style="text-align: center;">
+                <div style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">AVG DELAY</div>
+                <div style="font-size: 1.5rem; font-weight: 800; color: #D00000; margin: 2px 0 0 0;">{(avg_delay or 0):.1f}m</div>
+            </div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'delay', '#D00000'), use_container_width=True, config={'displayModeBar': False})
 
     with c4:
-        with st.container(border=True):
-            st.markdown(f"""
-                <div style="text-align: center;">
-                    <div style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase;">CANCELLED</div>
-                    <div style="font-size: 1.5rem; font-weight: 800; color: #0A192F; margin: 2px 0;">{safe_int(total_cancelled):,}</div>
-                </div>
-            """, unsafe_allow_html=True)
-            st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#64748B'), use_container_width=True, config={'displayModeBar': False})
+        st.markdown(f"""
+            <div style="text-align: center;">
+                <div style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">CANCELLED</div>
+                <div style="font-size: 1.5rem; font-weight: 800; color: #0A192F; margin: 2px 0 0 0;">{safe_int(total_cancelled):,}</div>
+            </div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#64748B'), use_container_width=True, config={'displayModeBar': False})
 
     with c5:
-        with st.container(border=True):
-            st.markdown(f"""
-                <div style="text-align: center;">
-                    <div style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase;">DIVERTED</div>
-                    <div style="font-size: 1.5rem; font-weight: 800; color: #0A192F; margin: 2px 0;">{safe_int(total_diverted):,}</div>
-                </div>
-            """, unsafe_allow_html=True)
-            st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#38BDF8'), use_container_width=True, config={'displayModeBar': False})
+        st.markdown(f"""
+            <div style="text-align: center;">
+                <div style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">DIVERTED</div>
+                <div style="font-size: 1.5rem; font-weight: 800; color: #0A192F; margin: 2px 0 0 0;">{safe_int(total_diverted):,}</div>
+            </div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#38BDF8'), use_container_width=True, config={'displayModeBar': False})
 
     st.markdown("---")
 
