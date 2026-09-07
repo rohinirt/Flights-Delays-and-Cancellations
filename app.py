@@ -73,7 +73,6 @@ page = st.sidebar.radio("Navigation", ["Arrivals Intelligence", "Departures Inte
 st.sidebar.markdown("---")
 st.sidebar.subheader("Filter Data")
 
-# Robust Positional Column Extraction (Prevents KeyError)
 airlines = conn.execute('SELECT DISTINCT "AIRLINE_CODE" FROM flights WHERE "AIRLINE_CODE" IS NOT NULL').df().iloc[:, 0].dropna().tolist()
 selected_airline = st.sidebar.multiselect("Select Airline", options=airlines, default=[])
 
@@ -177,7 +176,7 @@ if page == "Arrivals Intelligence":
             values=delay_values, 
             names=delay_labels,
             hole=0.5,
-            color_discrete_sequence=px.colors.sequential.Cyan
+            color_discrete_sequence=['#00f2fe', '#4facfe', '#00c6ff', '#0072ff', '#3a7bd5']
         )
         fig_delays.update_layout(margin=dict(t=20, b=20, l=20, r=20), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_delays, use_container_width=True)
@@ -222,7 +221,7 @@ elif page == "Departures Intelligence":
     fig_taxi = px.bar(
         taxi_df, x=x_col, y=y_col,
         labels={x_col: 'Hour of Day (24h)', y_col: 'Avg Taxi Out (min)'},
-        color=y_col, color_continuous_scale='Blugrn'
+        color=y_col, color_continuous_scale='Teal'
     )
     fig_taxi.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig_taxi, use_container_width=True)
