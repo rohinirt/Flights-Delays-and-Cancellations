@@ -219,7 +219,7 @@ def apply_light_plotly_theme(fig):
     )
     return fig
 
-# Fixed KPI Monthly Bar Chart Helper
+# KPI Monthly Bar Chart Helper
 def create_monthly_kpi_chart(data, x_col, y_col, bar_color="#0066CC"):
     data = data.copy()
     month_map = {1:'J', 2:'F', 3:'M', 4:'A', 5:'M', 6:'J', 7:'J', 8:'A', 9:'S', 10:'O', 11:'N', 12:'D'}
@@ -329,6 +329,77 @@ def create_3d_arrivals_map_all(conn, airline_filter=""):
     )
     return fig
 
+# Fully Visible Airline Flow Sankey Chart Function
+def create_airline_sankey_chart(conn, airline_filter=""):
+    sankey_data = conn.execute(f"""
+        SELECT 
+            "AIRLINE_CODE",
+            "ORIGIN",
+            COUNT(*) AS flight_count
+        FROM flights
+        WHERE "DEST" = 'ORD' {airline_filter}
+        GROUP BY "AIRLINE_CODE", "ORIGIN"
+        ORDER BY flight_count DESC
+        LIMIT 25
+    """).df()
+
+    if sankey_data.empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No data available for Sankey diagram", showarrow=False)
+        return fig
+
+    airlines_list = list(sankey_data['AIRLINE_CODE'].unique())
+    origins_list = list(sankey_data['ORIGIN'].unique())
+    all_nodes = airlines_list + origins_list + ['ORD (Chicago)']
+    
+    node_dict = {node: i for i, node in enumerate(all_nodes)}
+
+    sources = []
+    targets = []
+    values = []
+
+    # Stage 1: Airline -> Origin Airport
+    for _, row in sankey_data.iterrows():
+        sources.append(node_dict[row['AIRLINE_CODE']])
+        targets.append(node_dict[row['ORIGIN']])
+        values.append(int(row['flight_count']))
+
+    # Stage 2: Origin Airport -> ORD Destination
+    origin_totals = sankey_data.groupby('ORIGIN')['flight_count'].sum().reset_index()
+    for _, row in origin_totals.iterrows():
+        sources.append(node_dict[row['ORIGIN']])
+        targets.append(node_dict['ORD (Chicago)'])
+        values.append(int(row['flight_count']))
+
+    node_colors = ['#0066CC'] * len(airlines_list) + ['#0A192F'] * len(origins_list) + ['#D00000']
+
+    fig = go.Figure(data=[go.Sankey(
+        arrangement="fixed",
+        node=dict(
+            pad=18,
+            thickness=20,
+            line=dict(color="#CBD5E1", width=1),
+            label=all_nodes,
+            color=node_colors
+        ),
+        link=dict(
+            source=sources,
+            target=targets,
+            value=values,
+            color='rgba(0, 102, 204, 0.25)'
+        )
+    )])
+
+    fig.update_layout(
+        title=dict(text="🔀 Airline & Origin Flow to ORD (Sankey Diagram)", font=dict(size=15, color="#0F172A")),
+        font=dict(size=12, color='#0F172A', family="sans-serif"),
+        height=400,
+        margin=dict(l=15, r=15, t=40, b=20),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)"
+    )
+    return fig
+
 # Sidebar Filters
 st.sidebar.title("✈️ ORD Analytics")
 st.sidebar.caption("Chicago O'Hare International Airport")
@@ -365,7 +436,6 @@ if page == "Arrivals Intelligence":
     kpi_df = conn.execute(kpi_query).df()
     total_flights, on_time_pct, avg_delay, total_cancelled, total_diverted = kpi_df.iloc[0]
 
-    # Robust Date/Month trend extraction
     monthly_trend = conn.execute(f"""
         SELECT 
             MONTH(TRY_CAST(CAST("FL_DATE" AS VARCHAR) AS DATE)) AS month,
@@ -379,7 +449,7 @@ if page == "Arrivals Intelligence":
         ORDER BY month
     """).df()
 
-    # 1. Solid Color KPI Cards with Visible Sparkline Bar Charts
+    # 1. Solid Color KPI Cards
     c1, c2, c3, c4, c5 = st.columns(5)
     
     with c1:
@@ -485,7 +555,12 @@ if page == "Arrivals Intelligence":
 
     st.markdown("---")
 
-    # 3. Compact Flight Boarding Pass Cards
+    # 3. Dedicated Sankey Airline & Route Flow Section
+    st.plotly_chart(create_airline_sankey_chart(conn, airline_filter), use_container_width=True)
+
+    st.markdown("---")
+
+    # 4. Compact Flight Boarding Pass Cards
     col_longest, col_delayed = st.columns(2)
 
     with col_longest:
@@ -651,7 +726,7 @@ if page == "Arrivals Intelligence":
 
     st.markdown("---")
 
-    # 4. Temporal Heatmap & Delay Drivers
+    # 5. Temporal Heatmap & Delay Drivers
     c_heat, c_delay = st.columns([1.4, 1])
 
     with c_heat:
@@ -711,7 +786,7 @@ if page == "Arrivals Intelligence":
 
     st.markdown("---")
 
-    # 5. Flight Records Inspector Table
+    # 6. Flight Records Inspector Table
     st.subheader("📋 Inbound Flight Records Table")
     table_df = conn.execute(f"""
         SELECT "FL_DATE", "AIRLINE_CODE", "FL_NUMBER", "ORIGIN", "ARR_DELAY", "CANCELLED", "DISTANCE"
