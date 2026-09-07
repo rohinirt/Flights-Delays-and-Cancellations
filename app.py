@@ -72,7 +72,9 @@ page = st.sidebar.radio("Navigation", ["Arrivals Intelligence", "Departures Inte
 # Sidebar Global Filters
 st.sidebar.markdown("---")
 st.sidebar.subheader("Filter Data")
-airlines = conn.execute('SELECT DISTINCT "AIRLINE_CODE" FROM flights WHERE "AIRLINE_CODE" IS NOT NULL').df()['AIRLINE_CODE'].tolist()[cite: 1]
+
+# Robust Positional Column Extraction (Prevents KeyError)
+airlines = conn.execute('SELECT DISTINCT "AIRLINE_CODE" FROM flights WHERE "AIRLINE_CODE" IS NOT NULL').df().iloc[:, 0].dropna().tolist()
 selected_airline = st.sidebar.multiselect("Select Airline", options=airlines, default=[])
 
 airline_filter = ""
@@ -86,22 +88,23 @@ if page == "Arrivals Intelligence":
     
     kpi_query = f"""
         SELECT 
-            COUNT(*) AS "TOTAL_FLIGHTS",
-            AVG(CASE WHEN "ARR_DELAY" <= 0 THEN 1 ELSE 0 END) * 100 AS "ON_TIME_PCT",
-            AVG("ARR_DELAY") AS "AVG_DELAY",
-            SUM("CANCELLED") AS "TOTAL_CANCELLED",
-            SUM("DIVERTED") AS "TOTAL_DIVERTED"
+            COUNT(*) AS total_flights,
+            AVG(CASE WHEN "ARR_DELAY" <= 0 THEN 1 ELSE 0 END) * 100 AS on_time_pct,
+            AVG("ARR_DELAY") AS avg_delay,
+            SUM("CANCELLED") AS total_cancelled,
+            SUM("DIVERTED") AS total_diverted
         FROM flights 
         WHERE "DEST" = 'ORD' {airline_filter}
-    """[cite: 1]
+    """
     
-    kpis = conn.execute(kpi_query).df().iloc[0]
+    kpi_df = conn.execute(kpi_query).df()
+    total_flights, on_time_pct, avg_delay, total_cancelled, total_diverted = kpi_df.iloc[0]
     
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Arrivals", f"{int(kpis['TOTAL_FLIGHTS']):,}")
-    c2.metric("On-Time Arrival Rate", f"{kpis['ON_TIME_PCT']:.1f}%")
-    c3.metric("Avg Arrival Delay", f"{kpis['AVG_DELAY']:.1f} min")
-    c4.metric("Cancellations / Diversions", f"{int(kpis['TOTAL_CANCELLED']):,} / {int(kpis['TOTAL_DIVERTED']):,}")
+    c1.metric("Total Arrivals", f"{int(total_flights or 0):,}")
+    c2.metric("On-Time Arrival Rate", f"{(on_time_pct or 0):.1f}%")
+    c3.metric("Avg Arrival Delay", f"{(avg_delay or 0):.1f} min")
+    c4.metric("Cancellations / Diversions", f"{int(total_cancelled or 0):,} / {int(total_diverted or 0):,}")
     
     st.markdown("---")
     
@@ -110,27 +113,31 @@ if page == "Arrivals Intelligence":
     with col_left:
         st.subheader("3D Inbound Route Map")
         map_query = f"""
-            SELECT "ORIGIN", COUNT(*) AS "FLIGHT_COUNT", AVG("ARR_DELAY") AS "AVG_DELAY"
+            SELECT "ORIGIN", COUNT(*) AS flight_count, AVG("ARR_DELAY") AS avg_delay
             FROM flights
             WHERE "DEST" = 'ORD' {airline_filter}
             GROUP BY "ORIGIN"
-            ORDER BY "FLIGHT_COUNT" DESC
+            ORDER BY flight_count DESC
             LIMIT 15
-        """[cite: 1]
+        """
         map_df = conn.execute(map_query).df()
         
         map_data = []
         for idx, row in map_df.iterrows():
-            if row['ORIGIN'] in AIRPORT_COORDS:
-                orig_lon, orig_lat = AIRPORT_COORDS[row['ORIGIN']]
+            origin = row.iloc[0]
+            count = row.iloc[1]
+            delay = row.iloc[2]
+            
+            if origin in AIRPORT_COORDS:
+                orig_lon, orig_lat = AIRPORT_COORDS[origin]
                 map_data.append({
-                    'origin': row['ORIGIN'],
+                    'origin': origin,
                     'from_lon': orig_lon,
                     'from_lat': orig_lat,
                     'to_lon': ORD_LON,
                     'to_lat': ORD_LAT,
-                    'count': row['FLIGHT_COUNT'],
-                    'delay': max(0, row['AVG_DELAY'])
+                    'count': count,
+                    'delay': max(0, delay or 0)
                 })
         
         if map_data:
@@ -154,19 +161,21 @@ if page == "Arrivals Intelligence":
         st.subheader("Primary Delay Drivers")
         delay_query = f"""
             SELECT 
-                AVG("DELAY_DUE_CARRIER") AS "Carrier",
-                AVG("DELAY_DUE_WEATHER") AS "Weather",
-                AVG("DELAY_DUE_NAS") AS "NAS",
-                AVG("DELAY_DUE_SECURITY") AS "Security",
+                AVG("DELAY_DUE_CARRIER") AS Carrier,
+                AVG("DELAY_DUE_WEATHER") AS Weather,
+                AVG("DELAY_DUE_NAS") AS NAS,
+                AVG("DELAY_DUE_SECURITY") AS Security,
                 AVG("DELAY_DUE_LATE_AIRCRAFT") AS "Late Aircraft"
             FROM flights
             WHERE "DEST" = 'ORD' {airline_filter}
-        """[cite: 1]
-        delays = conn.execute(delay_query).df().iloc[0].fillna(0)
+        """
+        delays_df = conn.execute(delay_query).df()
+        delay_values = delays_df.iloc[0].fillna(0).values
+        delay_labels = delays_df.columns.tolist()
         
         fig_delays = px.pie(
-            values=delays.values, 
-            names=delays.index,
+            values=delay_values, 
+            names=delay_labels,
             hole=0.5,
             color_discrete_sequence=px.colors.sequential.Cyan
         )
@@ -179,39 +188,41 @@ elif page == "Departures Intelligence":
     
     kpi_query = f"""
         SELECT 
-            COUNT(*) AS "TOTAL_FLIGHTS",
-            AVG(CASE WHEN "DEP_DELAY" <= 0 THEN 1 ELSE 0 END) * 100 AS "ON_TIME_PCT",
-            AVG("DEP_DELAY") AS "AVG_DELAY",
-            AVG("TAXI_OUT") AS "AVG_TAXI_OUT"
+            COUNT(*) AS total_flights,
+            AVG(CASE WHEN "DEP_DELAY" <= 0 THEN 1 ELSE 0 END) * 100 AS on_time_pct,
+            AVG("DEP_DELAY") AS avg_delay,
+            AVG("TAXI_OUT") AS avg_taxi_out
         FROM flights 
         WHERE "ORIGIN" = 'ORD' {airline_filter}
-    """[cite: 1]
-    kpis = conn.execute(kpi_query).df().iloc[0]
+    """
+    kpi_df = conn.execute(kpi_query).df()
+    total_flights, on_time_pct, avg_delay, avg_taxi_out = kpi_df.iloc[0]
     
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Departures", f"{int(kpis['TOTAL_FLIGHTS']):,}")
-    c2.metric("On-Time Departure Rate", f"{kpis['ON_TIME_PCT']:.1f}%")
-    c3.metric("Avg Departure Delay", f"{kpis['AVG_DELAY']:.1f} min")
-    c4.metric("Avg Taxi-Out Duration", f"{kpis['AVG_TAXI_OUT']:.1f} min")
+    c1.metric("Total Departures", f"{int(total_flights or 0):,}")
+    c2.metric("On-Time Departure Rate", f"{(on_time_pct or 0):.1f}%")
+    c3.metric("Avg Departure Delay", f"{(avg_delay or 0):.1f} min")
+    c4.metric("Avg Taxi-Out Duration", f"{(avg_taxi_out or 0):.1f} min")
     
     st.markdown("---")
     
     st.subheader("Hourly Tarmac Taxi-Out Bottlenecks")
     taxi_query = f"""
         SELECT 
-            CAST("CRS_DEP_TIME" / 100 AS INT) AS "HOUR_OF_DAY",
-            AVG("TAXI_OUT") AS "AVG_TAXI"
+            CAST("CRS_DEP_TIME" / 100 AS INT) AS hour_of_day,
+            AVG("TAXI_OUT") AS avg_taxi
         FROM flights
         WHERE "ORIGIN" = 'ORD' {airline_filter}
-        GROUP BY "HOUR_OF_DAY"
-        ORDER BY "HOUR_OF_DAY"
-    """[cite: 1]
+        GROUP BY hour_of_day
+        ORDER BY hour_of_day
+    """
     taxi_df = conn.execute(taxi_query).df()
     
+    x_col, y_col = taxi_df.columns[0], taxi_df.columns[1]
     fig_taxi = px.bar(
-        taxi_df, x='HOUR_OF_DAY', y='AVG_TAXI',
-        labels={'HOUR_OF_DAY': 'Hour of Day (24h)', 'AVG_TAXI': 'Avg Taxi Out (min)'},
-        color='AVG_TAXI', color_continuous_scale='Blugrn'
+        taxi_df, x=x_col, y=y_col,
+        labels={x_col: 'Hour of Day (24h)', y_col: 'Avg Taxi Out (min)'},
+        color=y_col, color_continuous_scale='Blugrn'
     )
     fig_taxi.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig_taxi, use_container_width=True)
@@ -231,21 +242,28 @@ elif page == "Flight Deep-Dive":
         WHERE "FL_NUMBER" = {flight_num} {airline_filter}
         ORDER BY "FL_DATE" DESC
         LIMIT 10
-    """[cite: 1]
+    """
     flight_records = conn.execute(inspect_query).df()
     
     if not flight_records.empty:
         st.dataframe(flight_records, use_container_width=True)
         
         sample_flight = flight_records.iloc[0]
-        st.subheader(f"Time Breakdown: Flight {flight_num} on {sample_flight['FL_DATE']}")
+        fl_date = sample_flight.iloc[0]
+        dep_delay = sample_flight.iloc[4] or 0
+        taxi_out = sample_flight.iloc[5] or 0
+        air_time = sample_flight.iloc[6] or 0
+        taxi_in = sample_flight.iloc[7] or 0
+        arr_delay = sample_flight.iloc[8] or 0
+        
+        st.subheader(f"Time Breakdown: Flight {flight_num} on {fl_date}")
         
         fig_waterfall = go.Figure(go.Waterfall(
             name = "Timeline", orientation = "v",
             measure = ["relative", "relative", "relative", "relative", "total"],
             x = ["Dep Delay", "Taxi Out", "Air Time", "Taxi In", "Total Delay"],
             textposition = "outside",
-            y = [sample_flight['DEP_DELAY'], sample_flight['TAXI_OUT'], sample_flight['AIR_TIME'], sample_flight['TAXI_IN'], sample_flight['ARR_DELAY']],
+            y = [dep_delay, taxi_out, air_time, taxi_in, arr_delay],
             connector = {"line":{"color":"rgb(63, 63, 63)"}},
         ))
         fig_waterfall.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
