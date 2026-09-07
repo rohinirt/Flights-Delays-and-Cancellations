@@ -75,7 +75,8 @@ page = st.sidebar.radio("Navigation", ["Arrivals Intelligence", "Departures Inte
 # Sidebar Global Filters
 st.sidebar.markdown("---")
 st.sidebar.subheader("Filter Data")
-airlines = conn.execute("SELECT DISTINCT AIRLINE_CODE FROM flights WHERE AIRLINE_CODE IS NOT NULL").df()['AIRLINE_CODE'].tolist()[cite: 1]
+# Replace line 78 with this:
+airlines = conn.execute("SELECT DISTINCT AIRLINE_CODE FROM flights WHERE AIRLINE_CODE IS NOT NULL").df()['airline_code'].tolist()
 selected_airline = st.sidebar.multiselect("Select Airline", options=airlines, default=[])
 
 airline_filter = ""
