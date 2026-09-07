@@ -12,22 +12,42 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Professional High-Contrast Official FlyChicago Styling
+# Professional High-Contrast Styling
 st.markdown("""
 <style>
-    /* Global Application Base */
+    /* Base Page Theme */
     .stApp { 
         background-color: #f8fafc !important; 
         color: #0f172a !important;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
-    /* Force Dark Text across all Native Elements in Main Canvas */
+    /* Force Light Theme Text Colors */
     .stApp p, .stApp span, .stApp label, .stApp div, .stApp h1, .stApp h2, .stApp h3, .stApp h4 {
         color: #0f172a !important;
     }
 
-    /* Metric Cards Fix */
+    /* Fix Streamlit Segmented Control Unselected Buttons */
+    div[data-testid="stSegmentedControl"] button {
+        background-color: #0A192F !important;
+        border: 1px solid #1e293b !important;
+    }
+    div[data-testid="stSegmentedControl"] button p,
+    div[data-testid="stSegmentedControl"] button span {
+        color: #ffffff !important;
+        font-weight: 600 !important;
+    }
+    div[data-testid="stSegmentedControl"] button[aria-selected="true"] {
+        background-color: #38bdf8 !important;
+        border-color: #0284c7 !important;
+    }
+    div[data-testid="stSegmentedControl"] button[aria-selected="true"] p,
+    div[data-testid="stSegmentedControl"] button[aria-selected="true"] span {
+        color: #090d16 !important;
+        font-weight: 700 !important;
+    }
+
+    /* KPI Metrics Styling */
     div[data-testid="stMetric"] {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
@@ -45,7 +65,7 @@ st.markdown("""
         font-weight: 700 !important;
     }
 
-    /* Executive Flight Cards */
+    /* Flight Cards Styling */
     .flight-card-container {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
@@ -58,7 +78,6 @@ st.markdown("""
     .flight-card-delay {
         border-left-color: #D00000 !important;
     }
-    
     .card-title { 
         font-size: 1.05rem !important; 
         font-weight: 700 !important; 
@@ -76,16 +95,12 @@ st.markdown("""
         color: #1e293b !important; 
     }
 
-    /* Strict Sidebar Theme Isolation */
+    /* Dark Sidebar Scope */
     section[data-testid="stSidebar"] {
         background-color: #0A192F !important;
     }
     section[data-testid="stSidebar"] * {
         color: #ffffff !important;
-    }
-    section[data-testid="stSidebar"] .stSelectbox label, 
-    section[data-testid="stSidebar"] .stMultiSelect label {
-        color: #f1f5f9 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -110,7 +125,25 @@ except Exception as e:
     st.error(f"Error loading CSV dataset: {e}. Ensure 'flights_2022.csv' is in root directory.")
     st.stop()
 
-# Helper function to generate Micro Bar Charts inside KPI cards
+# Plotly High-Contrast Light Theme Config
+PLOTLY_THEME = dict(
+    font=dict(color="#0f172a", family="Segoe UI, sans-serif"),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    title=dict(font=dict(color="#0f172a", size=16, family="Segoe UI, sans-serif")),
+    xaxis=dict(
+        title=dict(font=dict(color="#0f172a")),
+        tickfont=dict(color="#0f172a"),
+        gridcolor="#e2e8f0"
+    ),
+    yaxis=dict(
+        title=dict(font=dict(color="#0f172a")),
+        tickfont=dict(color="#0f172a"),
+        gridcolor="#e2e8f0"
+    ),
+    legend=dict(font=dict(color="#0f172a"))
+)
+
 def create_kpi_bar_chart(data, x_col, y_col, color="#0066CC"):
     fig = px.bar(data, x=x_col, y=y_col)
     fig.update_traces(marker_color=color, opacity=0.85)
@@ -124,7 +157,7 @@ def create_kpi_bar_chart(data, x_col, y_col, color="#0066CC"):
     )
     return fig
 
-# Sidebar Global Navigation & Filters
+# Sidebar Filters
 st.sidebar.title("✈️ ORD Analytics")
 st.sidebar.caption("Chicago O'Hare International Airport")
 st.sidebar.markdown("---")
@@ -140,16 +173,13 @@ if selected_airline:
     formatted_airlines = "', '".join(selected_airline)
     airline_filter = f"AND \"AIRLINE_CODE\" IN ('{formatted_airlines}')"
 
-# Common Plotly Theme Settings for Clear Contrast
-plotly_font_config = dict(color="#0f172a", family="Segoe UI, sans-serif")
-
 # ==================== ARRIVALS INTELLIGENCE PAGE ====================
 if page == "Arrivals Intelligence":
     st.title("🛬 ORD Arrivals Intelligence")
     st.caption("2022 Operational Performance & Route Analytics")
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 1. KPI Cards with Micro-Bar Trends
+    # 1. KPI Cards
     kpi_query = f"""
         SELECT 
             COUNT(*) AS total_flights,
@@ -163,11 +193,9 @@ if page == "Arrivals Intelligence":
     kpi_df = conn.execute(kpi_query).df()
     total_flights, on_time_pct, avg_delay, total_cancelled, total_diverted = kpi_df.iloc[0]
 
-    # Extreme Flight Queries
     longest_dist_row = conn.execute(f'SELECT "FL_NUMBER", "ORIGIN", "DISTANCE" FROM flights WHERE "DEST" = \'ORD\' {airline_filter} ORDER BY "DISTANCE" DESC LIMIT 1').df().iloc[0]
     longest_time_row = conn.execute(f'SELECT "FL_NUMBER", "ORIGIN", "ELAPSED_TIME" FROM flights WHERE "DEST" = \'ORD\' {airline_filter} ORDER BY "ELAPSED_TIME" DESC LIMIT 1').df().iloc[0]
 
-    # Monthly Trends
     monthly_trend = conn.execute(f"""
         SELECT 
             CAST(SUBSTR(CAST("FL_DATE" AS VARCHAR), 5, 2) AS INT) AS month,
@@ -207,7 +235,7 @@ if page == "Arrivals Intelligence":
     measure = st.segmented_control(
         "Select Performance Metric:",
         ["Flights Count", "On-Time %", "Cancellations", "Avg Delay (min)"],
-        default="Flights Count"
+        default="Avg Delay (min)"
     )
     
     measure_map = {
@@ -233,13 +261,8 @@ if page == "Arrivals Intelligence":
             title=f"Top 5 Airlines by {measure}"
         )
         fig_air.update_traces(marker_color='#0066CC')
-        fig_air.update_layout(
-            font=plotly_font_config,
-            yaxis=dict(autorange="reversed", tickfont=plotly_font_config),
-            xaxis=dict(tickfont=plotly_font_config),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            margin=dict(l=20, r=20, t=40, b=20)
-        )
+        fig_air.update_layout(**PLOTLY_THEME)
+        fig_air.update_layout(yaxis=dict(autorange="reversed"), margin=dict(l=20, r=20, t=40, b=20))
         st.plotly_chart(fig_air, use_container_width=True)
 
     with col_orig:
@@ -255,13 +278,8 @@ if page == "Arrivals Intelligence":
             title=f"Top 5 Origin Hubs by {measure}"
         )
         fig_orig.update_traces(marker_color='#0A192F')
-        fig_orig.update_layout(
-            font=plotly_font_config,
-            yaxis=dict(autorange="reversed", tickfont=plotly_font_config),
-            xaxis=dict(tickfont=plotly_font_config),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            margin=dict(l=20, r=20, t=40, b=20)
-        )
+        fig_orig.update_layout(**PLOTLY_THEME)
+        fig_orig.update_layout(yaxis=dict(autorange="reversed"), margin=dict(l=20, r=20, t=40, b=20))
         st.plotly_chart(fig_orig, use_container_width=True)
 
     st.markdown("---")
@@ -351,10 +369,8 @@ if page == "Arrivals Intelligence":
             labels=dict(x="Hour of Day (24h)", y=y_label, color="Flights"),
             color_continuous_scale="Blues"
         )
-        fig_heat.update_layout(
-            font=plotly_font_config,
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
-        )
+        fig_heat.update_layout(**PLOTLY_THEME)
+        fig_heat.update_layout(coloraxis_colorbar=dict(title=dict(font=dict(color="#0f172a")), tickfont=dict(color="#0f172a")))
         st.plotly_chart(fig_heat, use_container_width=True)
 
     with c_delay:
@@ -375,11 +391,7 @@ if page == "Arrivals Intelligence":
             hole=0.45,
             color_discrete_sequence=['#0066CC', '#0A192F', '#D00000', '#64748B', '#38BDF8']
         )
-        fig_pie.update_layout(
-            font=plotly_font_config,
-            legend=dict(font=plotly_font_config),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
-        )
+        fig_pie.update_layout(**PLOTLY_THEME)
         st.plotly_chart(fig_pie, use_container_width=True)
 
     st.markdown("---")
@@ -406,10 +418,8 @@ if page == "Arrivals Intelligence":
         node=dict(pad=15, thickness=20, line=dict(color="black", width=0.5), label=labels, color="#0066CC"),
         link=dict(source=sources, target=targets, value=values, color="rgba(0, 102, 204, 0.2)")
     )])
-    fig_sankey.update_layout(
-        font=plotly_font_config,
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=350
-    )
+    fig_sankey.update_layout(**PLOTLY_THEME)
+    fig_sankey.update_layout(height=350)
     st.plotly_chart(fig_sankey, use_container_width=True)
 
     st.markdown("---")
@@ -421,7 +431,7 @@ if page == "Arrivals Intelligence":
         FROM flights WHERE "DEST" = 'ORD' {airline_filter}
         ORDER BY "FL_DATE" DESC LIMIT 100
     """).df()
-    st.dataframe(table_df, use_container_width=True, height=280)
+    st.dataframe(table_df, use_container_width=True, height=300)
 
 # ==================== OTHER PAGES ====================
 elif page == "Departures Intelligence":
