@@ -204,51 +204,32 @@ def render_flight_card(row):
     delay_label = f"+{arr_delay}m delay" if is_delayed else f"{arr_delay}m delay" if arr_delay < 0 else "On Time"
 
     # Wrap the HTML in textwrap.dedent() to prevent Streamlit from treating it as a code block
-    card_html = textwrap.dedent(f"""
-    <div style="background-color: #ffffff; border: 1px solid #dadce0; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; position: relative;">
-            <div style="font-size: 2.4rem; font-weight: 700; color: #202124; line-height: 1;">{origin_code}</div>
-            
-            <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; margin: 0 16px; position: relative;">
-                <div style="font-size: 0.85rem; color: #5f6368; font-weight: 500; margin-bottom: 2px;">{time_str}</div>
-                
-                <div style="font-size: 0.75rem; font-weight: 700; color: {theme_color}; background-color: #f1f3f4; padding: 2px 8px; border-radius: 10px; margin-bottom: 4px;">
+card_html = f"""
+    <div style="font-family: sans-serif; background-color: #ffffff; border: 1px solid #dadce0; border-radius: 12px; padding: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 2.4rem; font-weight: 700; color: #202124;">{origin_code}</div>
+            <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; margin: 0 16px;">
+                <div style="font-size: 0.85rem; color: #5f6368;">{time_str}</div>
+                <div style="font-size: 0.75rem; font-weight: 700; color: {theme_color}; background-color: #f1f3f4; padding: 2px 8px; border-radius: 10px;">
                     {delay_label}
                 </div>
-                
-                <div style="width: 100%; height: 2px; background-color: {theme_color}; position: relative; display: flex; justify-content: flex-end; align-items: center;">
-                    <span style="color: {theme_color}; font-size: 1rem; background-color: #ffffff; padding-left: 2px; margin-right: -4px;">✈</span>
-                </div>
             </div>
-            
-            <div style="font-size: 2.4rem; font-weight: 700; color: #202124; line-height: 1;">ORD</div>
+            <div style="font-size: 2.4rem; font-weight: 700; color: #202124;">ORD</div>
         </div>
-        
-        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: #70757a; margin-top: 4px; margin-bottom: 16px;">
-            <div><a href="#" style="color: #70757a; text-decoration: underline;">Airport info</a></div>
-            <div><a href="#" style="color: #70757a; text-decoration: underline;">Airport info</a></div>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 0.95rem; color: #202124; margin-bottom: 12px;">
-            <div><strong>{origin_city}</strong> · {fl_date_formatted}</div>
-            <div style="border-left: 1px solid #e8eaed; padding-left: 16px;"><strong>Chicago</strong> · {fl_date_formatted}</div>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
             <div>
                 <div style="font-size: 0.8rem; color: #5f6368;">Departed</div>
-                <div style="font-size: 1.5rem; font-weight: 600; color: {theme_color}; line-height: 1.2;">{dep_time}</div>
-                <div style="font-size: 0.85rem; color: #70757a; text-decoration: line-through;">{crs_dep}</div>
+                <div style="font-size: 1.5rem; font-weight: 600; color: {theme_color};">{dep_time}</div>
             </div>
-            <div style="border-left: 1px solid #e8eaed; padding-left: 16px;">
+            <div>
                 <div style="font-size: 0.8rem; color: #5f6368;">Arrived</div>
-                <div style="font-size: 1.5rem; font-weight: 600; color: {theme_color}; line-height: 1.2;">{actual_arr}</div>
-                <div style="font-size: 0.85rem; color: #70757a; text-decoration: line-through;">{crs_arr}</div>
+                <div style="font-size: 1.5rem; font-weight: 600; color: {theme_color};">{actual_arr}</div>
             </div>
         </div>
     </div>
-    """)
+    """
     
+    components.html(card_html, height=220)
     st.markdown(card_html, unsafe_allow_html=True)
 
 # ==================== ARRIVALS INTELLIGENCE PAGE ====================
