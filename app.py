@@ -18,28 +18,25 @@ def safe_int(val, default=0):
         return default
     return int(val)
 
-# Explicit CSS variable overrides to fix dark mode leakage
+# Global Styling Rules
 st.markdown("""
 <style>
-    /* Force Root Light Palette Variables */
     :root {
         --background-color: #f8fafc !important;
         --secondary-background-color: #ffffff !important;
         --text-color: #0f172a !important;
     }
 
-    /* Force Main App Canvas */
     .stApp, [data-testid="stAppViewContainer"] { 
         background-color: #f8fafc !important; 
         color: #0f172a !important;
     }
 
-    /* Force Dark Text on native text nodes */
     .stApp p, .stApp span, .stApp label, .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp caption {
         color: #0f172a !important;
     }
 
-    /* Segmented Control Unselected & Selected State Fix */
+    /* Segmented Control Fix */
     div[data-testid="stSegmentedControl"] {
         background-color: #e2e8f0 !important;
         border-radius: 8px !important;
@@ -61,39 +58,73 @@ st.markdown("""
         font-weight: 700 !important;
     }
 
-    /* KPI Metrics Styling */
-    div[data-testid="stMetric"] {
+    /* Google Flight Card Widget Styling (Image 2 Style) */
+    .flight-widget-card {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
-        border-radius: 8px !important;
-        padding: 12px !important;
+        border-radius: 12px !important;
+        padding: 16px 20px !important;
+        margin-bottom: 14px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
     }
-    div[data-testid="stMetricLabel"] p {
-        color: #475569 !important;
-        font-weight: 600 !important;
+    .flight-route-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
     }
-    div[data-testid="stMetricValue"] div {
-        color: #0A192F !important;
-        font-weight: 700 !important;
+    .airport-code {
+        font-size: 1.7rem;
+        font-weight: 800;
+        color: #0F172A;
+        line-height: 1;
+    }
+    .route-line-container {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 0 16px;
+    }
+    .flight-duration {
+        font-size: 0.8rem;
+        color: #64748B;
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+    .route-line {
+        width: 100%;
+        height: 1px;
+        background-color: #cbd5e1;
+        position: relative;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    .plane-icon {
+        font-size: 0.85rem;
+        color: #0066CC;
+        background-color: #ffffff;
+        padding: 0 4px;
+    }
+    .flight-details-grid {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        border-top: 1px solid #f1f5f9;
+        padding-top: 8px;
+        margin-top: 6px;
+    }
+    .detail-label {
+        color: #64748B;
+        font-size: 0.75rem;
+    }
+    .detail-value {
+        color: #0f172a;
+        font-weight: 700;
     }
 
-    /* Card Containers */
-    .flight-card-container {
-        background-color: #ffffff !important;
-        border: 1px solid #cbd5e1 !important;
-        border-left: 5px solid #0066CC !important;
-        border-radius: 8px !important;
-        padding: 14px 18px !important;
-        margin-bottom: 12px !important;
-    }
-    .flight-card-delay {
-        border-left-color: #D00000 !important;
-    }
-    .card-title { font-size: 1.05rem !important; font-weight: 700 !important; color: #0A192F !important; }
-    .card-subtitle { font-size: 0.85rem !important; color: #475569 !important; }
-    .card-metric { font-size: 0.9rem !important; font-weight: 600 !important; color: #1e293b !important; }
-
-    /* Dark Sidebar Isolation */
+    /* Sidebar Isolation */
     section[data-testid="stSidebar"] {
         background-color: #0A192F !important;
     }
@@ -123,7 +154,6 @@ except Exception as e:
     st.error(f"Error loading CSV dataset: {e}. Ensure 'flights_2022.csv' is in root directory.")
     st.stop()
 
-# Explicit Plotly Theme Applicator
 def apply_light_plotly_theme(fig):
     fig.update_layout(
         template="plotly_white",
@@ -149,16 +179,26 @@ def apply_light_plotly_theme(fig):
     )
     return fig
 
-def create_kpi_bar_chart(data, x_col, y_col, color="#0066CC"):
+# KPI Monthly Bar Chart Helper (Image 1 Style)
+def create_monthly_kpi_chart(data, x_col, y_col, bar_color="#0066CC"):
     fig = px.bar(data, x=x_col, y=y_col)
-    fig.update_traces(marker_color=color, opacity=0.85)
+    month_labels = {1:'J', 2:'F', 3:'M', 4:'A', 5:'M', 6:'J', 7:'J', 8:'A', 9:'S', 10:'O', 11:'N', 12:'D'}
+    
+    fig.update_traces(marker_color=bar_color, opacity=0.9)
     fig.update_layout(
-        margin=dict(l=0, r=0, t=2, b=0),
-        height=38,
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
+        margin=dict(l=5, r=5, t=10, b=20),
+        height=110,
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)"
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(
+            tickmode='array',
+            tickvals=list(month_labels.keys()),
+            ticktext=list(month_labels.values()),
+            tickfont=dict(size=11, color='#64748B'),
+            showgrid=False,
+            zeroline=False
+        ),
+        yaxis=dict(visible=False, showgrid=False)
     )
     return fig
 
@@ -184,7 +224,7 @@ if page == "Arrivals Intelligence":
     st.caption("2022 Operational Performance & Route Analytics")
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 1. KPI Cards
+    # KPI Queries
     kpi_query = f"""
         SELECT 
             COUNT(*) AS total_flights,
@@ -198,9 +238,6 @@ if page == "Arrivals Intelligence":
     kpi_df = conn.execute(kpi_query).df()
     total_flights, on_time_pct, avg_delay, total_cancelled, total_diverted = kpi_df.iloc[0]
 
-    longest_dist_row = conn.execute(f'SELECT "FL_NUMBER", "ORIGIN", COALESCE("DISTANCE", 0) FROM flights WHERE "DEST" = \'ORD\' {airline_filter} ORDER BY "DISTANCE" DESC LIMIT 1').df().iloc[0]
-    longest_time_row = conn.execute(f'SELECT "FL_NUMBER", "ORIGIN", COALESCE("ELAPSED_TIME", 0) FROM flights WHERE "DEST" = \'ORD\' {airline_filter} ORDER BY "ELAPSED_TIME" DESC LIMIT 1').df().iloc[0]
-
     monthly_trend = conn.execute(f"""
         SELECT 
             CAST(SUBSTR(CAST("FL_DATE" AS VARCHAR), 5, 2) AS INT) AS month,
@@ -212,31 +249,58 @@ if page == "Arrivals Intelligence":
         GROUP BY month ORDER BY month
     """).df()
 
-    c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
+    # 1. KPI Cards Row (Image 1 Style)
+    c1, c2, c3, c4, c5 = st.columns(5)
     
     with c1:
-        st.metric("Total Arrivals", f"{safe_int(total_flights):,}")
-        st.plotly_chart(create_kpi_bar_chart(monthly_trend, 'month', 'flights', '#0066CC'), use_container_width=True)
+        st.markdown(f"""
+            <div style="text-align: center; background: #ffffff; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                <div style="font-size: 0.8rem; font-weight: 700; color: #475569; text-transform: uppercase;">TOTAL ARRIVALS</div>
+                <div style="font-size: 1.6rem; font-weight: 800; color: #0A192F; margin-top: 4px;">{safe_int(total_flights):,}</div>
+            </div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#0066CC'), use_container_width=True)
+
     with c2:
-        st.metric("On-Time %", f"{(on_time_pct or 0):.1f}%")
-        st.plotly_chart(create_kpi_bar_chart(monthly_trend, 'month', 'on_time', '#10B981'), use_container_width=True)
+        st.markdown(f"""
+            <div style="text-align: center; background: #ffffff; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                <div style="font-size: 0.8rem; font-weight: 700; color: #475569; text-transform: uppercase;">ON-TIME %</div>
+                <div style="font-size: 1.6rem; font-weight: 800; color: #10B981; margin-top: 4px;">{(on_time_pct or 0):.1f}%</div>
+            </div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'on_time', '#10B981'), use_container_width=True)
+
     with c3:
-        st.metric("Avg Delay", f"{(avg_delay or 0):.1f}m")
-        st.plotly_chart(create_kpi_bar_chart(monthly_trend, 'month', 'delay', '#D00000'), use_container_width=True)
+        st.markdown(f"""
+            <div style="text-align: center; background: #ffffff; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                <div style="font-size: 0.8rem; font-weight: 700; color: #475569; text-transform: uppercase;">AVG DELAY</div>
+                <div style="font-size: 1.6rem; font-weight: 800; color: #D00000; margin-top: 4px;">{(avg_delay or 0):.1f}m</div>
+            </div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'delay', '#D00000'), use_container_width=True)
+
     with c4:
-        st.metric("Cancelled", f"{safe_int(total_cancelled):,}")
+        st.markdown(f"""
+            <div style="text-align: center; background: #ffffff; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                <div style="font-size: 0.8rem; font-weight: 700; color: #475569; text-transform: uppercase;">CANCELLED</div>
+                <div style="font-size: 1.6rem; font-weight: 800; color: #0A192F; margin-top: 4px;">{safe_int(total_cancelled):,}</div>
+            </div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#64748B'), use_container_width=True)
+
     with c5:
-        st.metric("Diverted", f"{safe_int(total_diverted):,}")
-    with c6:
-        st.metric("Max Distance", f"{safe_int(longest_dist_row.iloc[2])} mi", f"FL {safe_int(longest_dist_row.iloc[0])} ({longest_dist_row.iloc[1]})")
-    with c7:
-        st.metric("Max Flight Time", f"{safe_int(longest_time_row.iloc[2])} min", f"FL {safe_int(longest_time_row.iloc[0])} ({longest_time_row.iloc[1]})")
+        st.markdown(f"""
+            <div style="text-align: center; background: #ffffff; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                <div style="font-size: 0.8rem; font-weight: 700; color: #475569; text-transform: uppercase;">DIVERTED</div>
+                <div style="font-size: 1.6rem; font-weight: 800; color: #0A192F; margin-top: 4px;">{safe_int(total_diverted):,}</div>
+            </div>
+        """, unsafe_allow_html=True)
+        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#38BDF8'), use_container_width=True)
 
     st.markdown("---")
 
     # 2. Controls & Horizontal Bar Charts
     st.subheader("Top Performers Breakdown")
-    
     measure = st.segmented_control(
         "Select Performance Metric:",
         ["Flights Count", "On-Time %", "Cancellations", "Avg Delay (min)"],
@@ -289,7 +353,7 @@ if page == "Arrivals Intelligence":
 
     st.markdown("---")
 
-    # 3. Vertical Cards Side-by-Side
+    # 3. Flight Boarding Pass Cards (Image 2 Style)
     col_longest, col_delayed = st.columns(2)
 
     with col_longest:
@@ -310,13 +374,42 @@ if page == "Arrivals Intelligence":
         """).df()
 
         for idx, row in longest_df.iterrows():
+            origin_code = row['ORIGIN']
+            origin_city = row['ORIGIN_CITY']
+            dist = safe_int(row['distance'])
+            elapsed_time = safe_int(row['elapsed_time'])
+            hours, mins = divmod(elapsed_time, 60)
+            time_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
+            flight_no = safe_int(row['FL_NUMBER'])
+            airline = row['AIRLINE_CODE']
+
             st.markdown(f"""
-            <div class="flight-card-container">
-                <div class="card-title">Flight #{safe_int(row.iloc[0])} — {row.iloc[1]}</div>
-                <div class="card-subtitle">Origin: <b style="color:#0A192F;">{row.iloc[2]}</b> ({row.iloc[3]})</div>
-                <div style="display: flex; justify-content: space-between;">
-                    <span class="card-metric">📏 Distance: <b>{safe_int(row['distance'])} mi</b></span>
-                    <span class="card-metric">⏱️ Time: <b>{safe_int(row['elapsed_time'])} mins</b></span>
+            <div class="flight-widget-card">
+                <div class="flight-route-header">
+                    <div>
+                        <div class="airport-code">{origin_code}</div>
+                        <div style="font-size: 0.8rem; color: #64748B;">{origin_city}</div>
+                    </div>
+                    <div class="route-line-container">
+                        <span class="flight-duration">{time_str}</span>
+                        <div class="route-line">
+                            <span class="plane-icon">✈️</span>
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div class="airport-code">ORD</div>
+                        <div style="font-size: 0.8rem; color: #64748B;">Chicago</div>
+                    </div>
+                </div>
+                <div class="flight-details-grid">
+                    <div>
+                        <div class="detail-label">Carrier & Flight</div>
+                        <div class="detail-value">{airline} #{flight_no}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div class="detail-label">Distance</div>
+                        <div class="detail-value">{dist:,} mi</div>
+                    </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -339,13 +432,40 @@ if page == "Arrivals Intelligence":
         """).df()
 
         for idx, row in delayed_df.iterrows():
+            origin_code = row['ORIGIN']
+            origin_city = row['ORIGIN_CITY']
+            arr_delay_val = safe_int(row['arr_delay'])
+            carrier_delay_val = safe_int(row['carrier_delay'])
+            flight_no = safe_int(row['FL_NUMBER'])
+            airline = row['AIRLINE_CODE']
+
             st.markdown(f"""
-            <div class="flight-card-container flight-card-delay">
-                <div class="card-title">Flight #{safe_int(row.iloc[0])} — {row.iloc[1]}</div>
-                <div class="card-subtitle">Origin: <b style="color:#0A192F;">{row.iloc[2]}</b> ({row.iloc[3]})</div>
-                <div style="display: flex; justify-content: space-between;">
-                    <span class="card-metric" style="color: #D00000 !important;">🔴 Arr Delay: <b>{safe_int(row['arr_delay'])} mins</b></span>
-                    <span class="card-metric">🏢 Carrier Delay: <b>{safe_int(row['carrier_delay'])} mins</b></span>
+            <div class="flight-widget-card" style="border-left: 5px solid #D00000 !important;">
+                <div class="flight-route-header">
+                    <div>
+                        <div class="airport-code">{origin_code}</div>
+                        <div style="font-size: 0.8rem; color: #64748B;">{origin_city}</div>
+                    </div>
+                    <div class="route-line-container">
+                        <span class="flight-duration" style="color: #D00000; font-weight: 700;">+{arr_delay_val}m Delay</span>
+                        <div class="route-line">
+                            <span class="plane-icon" style="color: #D00000;">✈️</span>
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div class="airport-code">ORD</div>
+                        <div style="font-size: 0.8rem; color: #64748B;">Chicago</div>
+                    </div>
+                </div>
+                <div class="flight-details-grid">
+                    <div>
+                        <div class="detail-label">Carrier & Flight</div>
+                        <div class="detail-value">{airline} #{flight_no}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div class="detail-label">Carrier Delay</div>
+                        <div class="detail-value" style="color: #D00000;">{carrier_delay_val} mins</div>
+                    </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
