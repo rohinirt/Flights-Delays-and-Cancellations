@@ -54,7 +54,7 @@ st.markdown("""
         background-color: #FFFFFF !important;
         border: 1px solid #CBD5E1 !important;
         border-radius: 10px !important;
-        padding: 10px 6px 2px 6px !important;
+        padding: 10px 8px 4px 8px !important;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
     }
 
@@ -219,7 +219,7 @@ def apply_light_plotly_theme(fig):
     )
     return fig
 
-# KPI Monthly Bar Chart Helper
+# Fixed KPI Monthly Bar Chart Helper
 def create_monthly_kpi_chart(data, x_col, y_col, bar_color="#0066CC"):
     data = data.copy()
     month_map = {1:'J', 2:'F', 3:'M', 4:'A', 5:'M', 6:'J', 7:'J', 8:'A', 9:'S', 10:'O', 11:'N', 12:'D'}
@@ -228,32 +228,36 @@ def create_monthly_kpi_chart(data, x_col, y_col, bar_color="#0066CC"):
     fig = px.bar(data, x='month_code', y=y_col)
     fig.update_traces(
         marker_color=bar_color, 
-        opacity=0.95, 
-        hovertemplate="%{x}: %{y:,.0f}<extra></extra>"
+        opacity=0.9, 
+        hovertemplate="%{x}: %{y:,.1f}<extra></extra>"
     )
     fig.update_layout(
-        margin=dict(l=2, r=2, t=2, b=16),
-        height=65,
+        margin=dict(l=5, r=5, t=5, b=20),
+        height=100,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(
             type='category',
             categoryorder='array',
             categoryarray=['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'],
-            tickfont=dict(size=8, color='#475569', weight='bold'),
+            tickfont=dict(size=9, color='#475569', weight='bold'),
             showgrid=False,
             zeroline=False,
             fixedrange=True,
             title="",
             showline=False
         ),
-        yaxis=dict(visible=False, showgrid=False, fixedrange=True)
+        yaxis=dict(
+            visible=False, 
+            showgrid=False, 
+            fixedrange=True,
+            autorange=True
+        )
     )
     return fig
 
 # 3D Dynamic Globe Map displaying ALL Origin Airports
 def create_3d_arrivals_map_all(conn, airline_filter=""):
-    # Fallback coordinate lookup table for missing lat/lon in CSV
     airport_coords = {
         'ORD': (41.9742, -87.9073), 'LAX': (33.9416, -118.4085), 'JFK': (40.6413, -73.7781),
         'DFW': (32.8998, -97.0403), 'DEN': (39.8561, -104.6737), 'ATL': (33.6407, -84.4277),
@@ -361,18 +365,21 @@ if page == "Arrivals Intelligence":
     kpi_df = conn.execute(kpi_query).df()
     total_flights, on_time_pct, avg_delay, total_cancelled, total_diverted = kpi_df.iloc[0]
 
+    # Robust Date/Month trend extraction
     monthly_trend = conn.execute(f"""
         SELECT 
-            CAST(SUBSTR(CAST("FL_DATE" AS VARCHAR), 5, 2) AS INT) AS month,
+            MONTH(TRY_CAST(CAST("FL_DATE" AS VARCHAR) AS DATE)) AS month,
             COUNT(*) AS flights,
             AVG("ARR_DELAY") AS delay,
             AVG(CASE WHEN "ARR_DELAY" <= 0 THEN 1 ELSE 0 END) * 100 AS on_time
         FROM flights 
         WHERE "DEST" = 'ORD' {airline_filter}
-        GROUP BY month ORDER BY month
+        GROUP BY month 
+        HAVING month IS NOT NULL
+        ORDER BY month
     """).df()
 
-    # 1. Solid Color KPI Cards with Monthly Bar Charts
+    # 1. Solid Color KPI Cards with Visible Sparkline Bar Charts
     c1, c2, c3, c4, c5 = st.columns(5)
     
     with c1:
@@ -422,7 +429,7 @@ if page == "Arrivals Intelligence":
 
     st.markdown("---")
 
-    # 2. 3D Globe Network & Top Performers Breakdown with View Switcher
+    # 2. 3D Globe Network & Top Performers Breakdown
     col_map, col_perf = st.columns([1.1, 1])
 
     with col_map:
@@ -431,7 +438,6 @@ if page == "Arrivals Intelligence":
     with col_perf:
         st.subheader("Top Performers Breakdown")
         
-        # Interactive Toggle between Top Airlines and Top Origin Cities
         chart_view = st.segmented_control(
             "View Breakdown By:",
             ["Top Airlines", "Top Origin Cities"],
@@ -479,7 +485,7 @@ if page == "Arrivals Intelligence":
 
     st.markdown("---")
 
-    # 3. Compact Flight Boarding Pass Cards (With Airline & Flight Number)
+    # 3. Compact Flight Boarding Pass Cards
     col_longest, col_delayed = st.columns(2)
 
     with col_longest:
@@ -655,7 +661,7 @@ if page == "Arrivals Intelligence":
         if heat_dim == "Month vs. Hour":
             heat_df = conn.execute(f"""
                 SELECT 
-                    CAST(SUBSTR(CAST("FL_DATE" AS VARCHAR), 5, 2) AS INT) AS row_dim,
+                    MONTH(TRY_CAST(CAST("FL_DATE" AS VARCHAR) AS DATE)) AS row_dim,
                     CAST("CRS_ARR_TIME" / 100 AS INT) AS hour,
                     COUNT(*) AS flights
                 FROM flights WHERE "DEST" = 'ORD' {airline_filter}
@@ -665,7 +671,7 @@ if page == "Arrivals Intelligence":
         else:
             heat_df = conn.execute(f"""
                 SELECT 
-                    DAYOFWEEK(CAST(SUBSTR(CAST("FL_DATE" AS VARCHAR), 1, 4) || '-' || SUBSTR(CAST("FL_DATE" AS VARCHAR), 5, 2) || '-' || SUBSTR(CAST("FL_DATE" AS VARCHAR), 7, 2) AS DATE)) AS row_dim,
+                    DAYOFWEEK(TRY_CAST(CAST("FL_DATE" AS VARCHAR) AS DATE)) AS row_dim,
                     CAST("CRS_ARR_TIME" / 100 AS INT) AS hour,
                     COUNT(*) AS flights
                 FROM flights WHERE "DEST" = 'ORD' {airline_filter}
