@@ -18,6 +18,19 @@ def safe_int(val, default=0):
         return default
     return int(val)
 
+# Helper function to format military time strings (e.g., 1600 -> 4:00 pm)
+def format_time_str(time_val):
+    if pd.isna(time_val) or time_val is None:
+        return "--:--"
+    time_str = str(int(time_val)).zfill(4)
+    hours = int(time_str[:2])
+    mins = int(time_str[2:])
+    period = "am" if hours < 12 else "pm"
+    display_hour = hours if hours % 12 != 0 else 12
+    if display_hour > 12:
+        display_hour -= 12
+    return f"{display_hour}:{mins:02d} {period}"
+
 # Global Styling Rules
 st.markdown("""
 <style>
@@ -64,17 +77,17 @@ st.markdown("""
         border: 1px solid #cbd5e1 !important;
         border-radius: 12px !important;
         padding: 16px 20px !important;
-        margin-bottom: 14px !important;
+        margin-bottom: 16px !important;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
     }
     .flight-route-header {
         display: flex;
         justify-content: space-between;
-        align-items: center;
-        margin-bottom: 8px;
+        align-items: flex-start;
+        margin-bottom: 12px;
     }
     .airport-code {
-        font-size: 1.7rem;
+        font-size: 2.2rem;
         font-weight: 800;
         color: #0F172A;
         line-height: 1;
@@ -85,12 +98,13 @@ st.markdown("""
         flex-direction: column;
         align-items: center;
         padding: 0 16px;
+        margin-top: 4px;
     }
     .flight-duration {
-        font-size: 0.8rem;
-        color: #64748B;
+        font-size: 0.85rem;
+        color: #475569;
         font-weight: 600;
-        margin-bottom: 4px;
+        margin-bottom: 6px;
     }
     .route-line {
         width: 100%;
@@ -102,26 +116,37 @@ st.markdown("""
         align-items: center;
     }
     .plane-icon {
-        font-size: 0.85rem;
+        font-size: 0.9rem;
         color: #0066CC;
         background-color: #ffffff;
-        padding: 0 4px;
+        padding: 0 6px;
+    }
+    .flight-subtitle {
+        font-size: 0.85rem;
+        color: #475569;
+        margin-top: 4px;
     }
     .flight-details-grid {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.85rem;
+        display: grid;
+        grid-template-columns: 1fr 1.2fr;
+        gap: 12px;
         border-top: 1px solid #f1f5f9;
-        padding-top: 8px;
-        margin-top: 6px;
+        padding-top: 12px;
+        margin-top: 10px;
+    }
+    .flight-column-left {
+        border-right: 1px solid #f1f5f9;
+        padding-right: 8px;
+    }
+    .time-display {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin-top: 2px;
     }
     .detail-label {
         color: #64748B;
         font-size: 0.75rem;
-    }
-    .detail-value {
-        color: #0f172a;
-        font-weight: 700;
+        font-weight: 500;
     }
 
     /* Sidebar Isolation */
@@ -184,7 +209,7 @@ def create_monthly_kpi_chart(data, x_col, y_col, bar_color="#0066CC"):
     fig = px.bar(data, x=x_col, y=y_col)
     month_labels = {1:'J', 2:'F', 3:'M', 4:'A', 5:'M', 6:'J', 7:'J', 8:'A', 9:'S', 10:'O', 11:'N', 12:'D'}
     
-    fig.update_traces(marker_color=bar_color, opacity=0.9)
+    fig.update_traces(marker_color=bar_color, opacity=0.9, hovertemplate="%{y:,.0f}<extra></extra>")
     fig.update_layout(
         margin=dict(l=5, r=5, t=10, b=20),
         height=110,
@@ -358,37 +383,45 @@ if page == "Arrivals Intelligence":
 
     with col_longest:
         st.subheader("✈️ Top 5 Longest Inbound Routes")
-        card_toggle = st.segmented_control("Sort Longest Routes By:", ["Distance (Miles)", "Elapsed Time (Minutes)"], default="Distance (Miles)")
-        sort_col = '"DISTANCE"' if card_toggle == "Distance (Miles)" else '"ELAPSED_TIME"'
         
         longest_df = conn.execute(f"""
-            SELECT DISTINCT 
+            SELECT 
                 "FL_NUMBER", 
                 "AIRLINE_CODE", 
                 "ORIGIN", 
                 "ORIGIN_CITY", 
-                COALESCE("DISTANCE", 0) AS distance, 
-                COALESCE("ELAPSED_TIME", 0) AS elapsed_time
+                "FL_DATE",
+                COALESCE("CRS_DEP_TIME", 0) AS crs_dep,
+                COALESCE("CRS_ARR_TIME", 0) AS crs_arr,
+                COALESCE("ARR_TIME", 0) AS actual_arr,
+                COALESCE("ELAPSED_TIME", 0) AS elapsed_time,
+                COALESCE("ARR_DELAY", 0) AS arr_delay
             FROM flights WHERE "DEST" = 'ORD' {airline_filter}
-            ORDER BY {sort_col} DESC LIMIT 5
+            ORDER BY "ELAPSED_TIME" DESC LIMIT 5
         """).df()
 
         for idx, row in longest_df.iterrows():
             origin_code = row['ORIGIN']
             origin_city = row['ORIGIN_CITY']
-            dist = safe_int(row['distance'])
+            fl_date = str(row['FL_DATE'])
+            formatted_date = f"{fl_date[6:8]}/{fl_date[4:6]}/{fl_date[:4]}" if len(fl_date) == 8 else fl_date
+            
             elapsed_time = safe_int(row['elapsed_time'])
             hours, mins = divmod(elapsed_time, 60)
             time_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
-            flight_no = safe_int(row['FL_NUMBER'])
-            airline = row['AIRLINE_CODE']
+            
+            dep_time = format_time_str(row['crs_dep'])
+            crs_arr_time = format_time_str(row['crs_arr'])
+            actual_arr_time = format_time_str(row['actual_arr'])
+            delay_val = safe_int(row['arr_delay'])
+            delay_color = "#10B981" if delay_val <= 0 else "#D00000"
 
             st.markdown(f"""
             <div class="flight-widget-card">
                 <div class="flight-route-header">
                     <div>
                         <div class="airport-code">{origin_code}</div>
-                        <div style="font-size: 0.8rem; color: #64748B;">{origin_city}</div>
+                        <div class="flight-subtitle"><a href="#" style="color:#0066CC; text-decoration:none;">Airport info</a></div>
                     </div>
                     <div class="route-line-container">
                         <span class="flight-duration">{time_str}</span>
@@ -398,17 +431,29 @@ if page == "Arrivals Intelligence":
                     </div>
                     <div style="text-align: right;">
                         <div class="airport-code">ORD</div>
-                        <div style="font-size: 0.8rem; color: #64748B;">Chicago</div>
+                        <div class="flight-subtitle"><a href="#" style="color:#0066CC; text-decoration:none;">Airport info</a></div>
                     </div>
                 </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #475569; padding-bottom: 6px;">
+                    <div><strong>{origin_city}</strong> · {formatted_date}</div>
+                    <div><strong>Chicago</strong> · {formatted_date}</div>
+                </div>
                 <div class="flight-details-grid">
-                    <div>
-                        <div class="detail-label">Carrier & Flight</div>
-                        <div class="detail-value">{airline} #{flight_no}</div>
+                    <div class="flight-column-left">
+                        <div class="detail-label">Scheduled departure</div>
+                        <div class="time-display" style="color: #0066CC;">{dep_time}</div>
                     </div>
-                    <div style="text-align: right;">
-                        <div class="detail-label">Distance</div>
-                        <div class="detail-value">{dist:,} mi</div>
+                    <div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <div>
+                                <div class="detail-label">Scheduled arrival</div>
+                                <div class="time-display" style="color: #0F172A;">{crs_arr_time}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div class="detail-label">Actual arrival / Delay</div>
+                                <div class="time-display" style="color: {delay_color};">{actual_arr_time} ({delay_val:+}m)</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -416,8 +461,6 @@ if page == "Arrivals Intelligence":
 
     with col_delayed:
         st.subheader("⚠️ Top 5 Most Delayed Inbound Flights")
-        delay_toggle = st.segmented_control("Sort Delay By:", ["Arrival Delay", "Carrier Delay"], default="Arrival Delay")
-        delay_sort_col = '"ARR_DELAY"' if delay_toggle == "Arrival Delay" else '"DELAY_DUE_CARRIER"'
 
         delayed_df = conn.execute(f"""
             SELECT 
@@ -425,46 +468,69 @@ if page == "Arrivals Intelligence":
                 "AIRLINE_CODE", 
                 "ORIGIN", 
                 "ORIGIN_CITY", 
-                COALESCE("ARR_DELAY", 0) AS arr_delay, 
-                COALESCE("DELAY_DUE_CARRIER", 0) AS carrier_delay
+                "FL_DATE",
+                COALESCE("CRS_DEP_TIME", 0) AS crs_dep,
+                COALESCE("CRS_ARR_TIME", 0) AS crs_arr,
+                COALESCE("ARR_TIME", 0) AS actual_arr,
+                COALESCE("ELAPSED_TIME", 0) AS elapsed_time,
+                COALESCE("ARR_DELAY", 0) AS arr_delay
             FROM flights WHERE "DEST" = 'ORD' {airline_filter}
-            ORDER BY {delay_sort_col} DESC LIMIT 5
+            ORDER BY "ARR_DELAY" DESC LIMIT 5
         """).df()
 
         for idx, row in delayed_df.iterrows():
             origin_code = row['ORIGIN']
             origin_city = row['ORIGIN_CITY']
-            arr_delay_val = safe_int(row['arr_delay'])
-            carrier_delay_val = safe_int(row['carrier_delay'])
-            flight_no = safe_int(row['FL_NUMBER'])
-            airline = row['AIRLINE_CODE']
+            fl_date = str(row['FL_DATE'])
+            formatted_date = f"{fl_date[6:8]}/{fl_date[4:6]}/{fl_date[:4]}" if len(fl_date) == 8 else fl_date
+            
+            elapsed_time = safe_int(row['elapsed_time'])
+            hours, mins = divmod(elapsed_time, 60)
+            time_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
+            
+            dep_time = format_time_str(row['crs_dep'])
+            crs_arr_time = format_time_str(row['crs_arr'])
+            actual_arr_time = format_time_str(row['actual_arr'])
+            delay_val = safe_int(row['arr_delay'])
 
             st.markdown(f"""
             <div class="flight-widget-card" style="border-left: 5px solid #D00000 !important;">
                 <div class="flight-route-header">
                     <div>
                         <div class="airport-code">{origin_code}</div>
-                        <div style="font-size: 0.8rem; color: #64748B;">{origin_city}</div>
+                        <div class="flight-subtitle"><a href="#" style="color:#0066CC; text-decoration:none;">Airport info</a></div>
                     </div>
                     <div class="route-line-container">
-                        <span class="flight-duration" style="color: #D00000; font-weight: 700;">+{arr_delay_val}m Delay</span>
+                        <span class="flight-duration" style="color: #D00000; font-weight: 700;">{time_str}</span>
                         <div class="route-line">
                             <span class="plane-icon" style="color: #D00000;">✈️</span>
                         </div>
                     </div>
                     <div style="text-align: right;">
                         <div class="airport-code">ORD</div>
-                        <div style="font-size: 0.8rem; color: #64748B;">Chicago</div>
+                        <div class="flight-subtitle"><a href="#" style="color:#0066CC; text-decoration:none;">Airport info</a></div>
                     </div>
                 </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #475569; padding-bottom: 6px;">
+                    <div><strong>{origin_city}</strong> · {formatted_date}</div>
+                    <div><strong>Chicago</strong> · {formatted_date}</div>
+                </div>
                 <div class="flight-details-grid">
-                    <div>
-                        <div class="detail-label">Carrier & Flight</div>
-                        <div class="detail-value">{airline} #{flight_no}</div>
+                    <div class="flight-column-left">
+                        <div class="detail-label">Scheduled departure</div>
+                        <div class="time-display" style="color: #0066CC;">{dep_time}</div>
                     </div>
-                    <div style="text-align: right;">
-                        <div class="detail-label">Carrier Delay</div>
-                        <div class="detail-value" style="color: #D00000;">{carrier_delay_val} mins</div>
+                    <div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <div>
+                                <div class="detail-label">Scheduled arrival</div>
+                                <div class="time-display" style="color: #0F172A;">{crs_arr_time}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div class="detail-label">Actual arrival / Delay</div>
+                                <div class="time-display" style="color: #D00000;">{actual_arr_time} (+{delay_val}m)</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
