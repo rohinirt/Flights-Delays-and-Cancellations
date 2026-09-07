@@ -72,7 +72,7 @@ page = st.sidebar.radio("Navigation", ["Arrivals Intelligence", "Departures Inte
 # Sidebar Global Filters
 st.sidebar.markdown("---")
 st.sidebar.subheader("Filter Data")
-airlines = conn.execute('SELECT DISTINCT "AIRLINE_CODE" FROM flights WHERE "AIRLINE_CODE" IS NOT NULL').df()['AIRLINE_CODE'].tolist()
+airlines = conn.execute('SELECT DISTINCT "AIRLINE_CODE" FROM flights WHERE "AIRLINE_CODE" IS NOT NULL').df()['AIRLINE_CODE'].tolist()[cite: 1]
 selected_airline = st.sidebar.multiselect("Select Airline", options=airlines, default=[])
 
 airline_filter = ""
@@ -94,6 +94,7 @@ if page == "Arrivals Intelligence":
         FROM flights 
         WHERE "DEST" = 'ORD' {airline_filter}
     """[cite: 1]
+    
     kpis = conn.execute(kpi_query).df().iloc[0]
     
     c1, c2, c3, c4 = st.columns(4)
