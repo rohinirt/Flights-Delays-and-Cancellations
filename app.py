@@ -4,7 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 
-# Page Configuration
+# 1. FORCE GLOBAL LIGHT THEME AT THE CONFIG LEVEL
 st.set_page_config(
     page_title="Chicago O'Hare (ORD) Flight Intelligence",
     page_icon="✈️",
@@ -12,60 +12,57 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Professional High-Contrast Styling
+# Enforce light theme variables across native Streamlit components and dataframes
+st.config.set_option("theme.base", "light")
+st.config.set_option("theme.primaryColor", "#0066CC")
+st.config.set_option("theme.backgroundColor", "#f8fafc")
+st.config.set_option("theme.secondaryBackgroundColor", "#ffffff")
+st.config.set_option("theme.textColor", "#0f172a")
+
+# 2. CSS OVERRIDES FOR SEGMENTED CONTROLS & SIDEBAR
 st.markdown("""
 <style>
-    /* Base Page Theme */
-    .stApp { 
-        background-color: #f8fafc !important; 
-        color: #0f172a !important;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-
-    /* Force Light Theme Text Colors */
-    .stApp p, .stApp span, .stApp label, .stApp div, .stApp h1, .stApp h2, .stApp h3, .stApp h4 {
+    /* Global Text Fix */
+    .stApp, .stApp * {
         color: #0f172a !important;
     }
 
-    /* Fix Streamlit Segmented Control Unselected Buttons */
+    /* Force Visible Text in Segmented Controls (Selected & Unselected) */
     div[data-testid="stSegmentedControl"] button {
-        background-color: #0A192F !important;
-        border: 1px solid #1e293b !important;
+        background-color: #e2e8f0 !important;
+        border: 1px solid #cbd5e1 !important;
     }
     div[data-testid="stSegmentedControl"] button p,
     div[data-testid="stSegmentedControl"] button span {
-        color: #ffffff !important;
+        color: #0f172a !important;
         font-weight: 600 !important;
     }
     div[data-testid="stSegmentedControl"] button[aria-selected="true"] {
-        background-color: #38bdf8 !important;
-        border-color: #0284c7 !important;
+        background-color: #0066CC !important;
     }
     div[data-testid="stSegmentedControl"] button[aria-selected="true"] p,
     div[data-testid="stSegmentedControl"] button[aria-selected="true"] span {
-        color: #090d16 !important;
+        color: #ffffff !important;
         font-weight: 700 !important;
     }
 
-    /* KPI Metrics Styling */
+    /* Metric Cards Fix */
     div[data-testid="stMetric"] {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
         border-radius: 8px !important;
         padding: 12px !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
     }
     div[data-testid="stMetricLabel"] p {
         color: #475569 !important;
         font-weight: 600 !important;
-        font-size: 0.85rem !important;
     }
     div[data-testid="stMetricValue"] div {
         color: #0A192F !important;
         font-weight: 700 !important;
     }
 
-    /* Flight Cards Styling */
+    /* Custom Flight Cards */
     .flight-card-container {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
@@ -73,7 +70,6 @@ st.markdown("""
         border-radius: 8px !important;
         padding: 14px 18px !important;
         margin-bottom: 12px !important;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04) !important;
     }
     .flight-card-delay {
         border-left-color: #D00000 !important;
@@ -82,12 +78,10 @@ st.markdown("""
         font-size: 1.05rem !important; 
         font-weight: 700 !important; 
         color: #0A192F !important; 
-        margin: 0 !important; 
     }
     .card-subtitle { 
         font-size: 0.85rem !important; 
         color: #475569 !important; 
-        margin-bottom: 8px !important; 
     }
     .card-metric { 
         font-size: 0.9rem !important; 
@@ -95,7 +89,7 @@ st.markdown("""
         color: #1e293b !important; 
     }
 
-    /* Dark Sidebar Scope */
+    /* Sidebar Theme Isolation */
     section[data-testid="stSidebar"] {
         background-color: #0A192F !important;
     }
@@ -125,24 +119,31 @@ except Exception as e:
     st.error(f"Error loading CSV dataset: {e}. Ensure 'flights_2022.csv' is in root directory.")
     st.stop()
 
-# Plotly High-Contrast Light Theme Config
-PLOTLY_THEME = dict(
-    font=dict(color="#0f172a", family="Segoe UI, sans-serif"),
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)",
-    title=dict(font=dict(color="#0f172a", size=16, family="Segoe UI, sans-serif")),
-    xaxis=dict(
-        title=dict(font=dict(color="#0f172a")),
-        tickfont=dict(color="#0f172a"),
-        gridcolor="#e2e8f0"
-    ),
-    yaxis=dict(
-        title=dict(font=dict(color="#0f172a")),
-        tickfont=dict(color="#0f172a"),
-        gridcolor="#e2e8f0"
-    ),
-    legend=dict(font=dict(color="#0f172a"))
-)
+# Helper function to apply dark-text layout formatting to Plotly charts
+def format_plotly_figure(fig):
+    fig.update_layout(
+        template="plotly_white",
+        font=dict(color="#0f172a", family="sans-serif"),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        title=dict(font=dict(color="#0f172a", size=16)),
+        xaxis=dict(
+            title=dict(font=dict(color="#0f172a")),
+            tickfont=dict(color="#0f172a"),
+            gridcolor="#e2e8f0"
+        ),
+        yaxis=dict(
+            title=dict(font=dict(color="#0f172a")),
+            tickfont=dict(color="#0f172a"),
+            gridcolor="#e2e8f0"
+        ),
+        legend=dict(font=dict(color="#0f172a")),
+        coloraxis_colorbar=dict(
+            title=dict(font=dict(color="#0f172a")),
+            tickfont=dict(color="#0f172a")
+        )
+    )
+    return fig
 
 def create_kpi_bar_chart(data, x_col, y_col, color="#0066CC"):
     fig = px.bar(data, x=x_col, y=y_col)
@@ -157,7 +158,7 @@ def create_kpi_bar_chart(data, x_col, y_col, color="#0066CC"):
     )
     return fig
 
-# Sidebar Filters
+# Sidebar Global Navigation & Filters
 st.sidebar.title("✈️ ORD Analytics")
 st.sidebar.caption("Chicago O'Hare International Airport")
 st.sidebar.markdown("---")
@@ -261,7 +262,7 @@ if page == "Arrivals Intelligence":
             title=f"Top 5 Airlines by {measure}"
         )
         fig_air.update_traces(marker_color='#0066CC')
-        fig_air.update_layout(**PLOTLY_THEME)
+        fig_air = format_plotly_figure(fig_air)
         fig_air.update_layout(yaxis=dict(autorange="reversed"), margin=dict(l=20, r=20, t=40, b=20))
         st.plotly_chart(fig_air, use_container_width=True)
 
@@ -278,7 +279,7 @@ if page == "Arrivals Intelligence":
             title=f"Top 5 Origin Hubs by {measure}"
         )
         fig_orig.update_traces(marker_color='#0A192F')
-        fig_orig.update_layout(**PLOTLY_THEME)
+        fig_orig = format_plotly_figure(fig_orig)
         fig_orig.update_layout(yaxis=dict(autorange="reversed"), margin=dict(l=20, r=20, t=40, b=20))
         st.plotly_chart(fig_orig, use_container_width=True)
 
@@ -369,8 +370,7 @@ if page == "Arrivals Intelligence":
             labels=dict(x="Hour of Day (24h)", y=y_label, color="Flights"),
             color_continuous_scale="Blues"
         )
-        fig_heat.update_layout(**PLOTLY_THEME)
-        fig_heat.update_layout(coloraxis_colorbar=dict(title=dict(font=dict(color="#0f172a")), tickfont=dict(color="#0f172a")))
+        fig_heat = format_plotly_figure(fig_heat)
         st.plotly_chart(fig_heat, use_container_width=True)
 
     with c_delay:
@@ -391,7 +391,7 @@ if page == "Arrivals Intelligence":
             hole=0.45,
             color_discrete_sequence=['#0066CC', '#0A192F', '#D00000', '#64748B', '#38BDF8']
         )
-        fig_pie.update_layout(**PLOTLY_THEME)
+        fig_pie = format_plotly_figure(fig_pie)
         st.plotly_chart(fig_pie, use_container_width=True)
 
     st.markdown("---")
@@ -418,7 +418,7 @@ if page == "Arrivals Intelligence":
         node=dict(pad=15, thickness=20, line=dict(color="black", width=0.5), label=labels, color="#0066CC"),
         link=dict(source=sources, target=targets, value=values, color="rgba(0, 102, 204, 0.2)")
     )])
-    fig_sankey.update_layout(**PLOTLY_THEME)
+    fig_sankey = format_plotly_figure(fig_sankey)
     fig_sankey.update_layout(height=350)
     st.plotly_chart(fig_sankey, use_container_width=True)
 
