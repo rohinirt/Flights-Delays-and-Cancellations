@@ -251,8 +251,9 @@ def create_monthly_kpi_chart(data, x_col, y_col, bar_color="#0066CC"):
     )
     return fig
 
-# 3D Interactive Arrivals Map Helper
-def create_3d_arrivals_map(df):
+# 3D Dynamic Globe Map displaying ALL Origin Airports
+def create_3d_arrivals_map_all(conn, airline_filter=""):
+    # Fallback coordinate lookup table for missing lat/lon in CSV
     airport_coords = {
         'ORD': (41.9742, -87.9073), 'LAX': (33.9416, -118.4085), 'JFK': (40.6413, -73.7781),
         'DFW': (32.8998, -97.0403), 'DEN': (39.8561, -104.6737), 'ATL': (33.6407, -84.4277),
@@ -263,12 +264,20 @@ def create_3d_arrivals_map(df):
         'MIA': (25.7959, -80.2870), 'SAN': (32.7338, -117.1933), 'SLC': (40.7899, -111.9791)
     }
 
+    origins_df = conn.execute(f"""
+        SELECT 
+            "ORIGIN",
+            COUNT(*) AS flight_count
+        FROM flights 
+        WHERE "DEST" = 'ORD' {airline_filter}
+        GROUP BY "ORIGIN"
+        ORDER BY flight_count DESC
+    """).df()
+
     ord_lat, ord_lon = airport_coords['ORD']
-    top_origins = df.groupby('ORIGIN').size().reset_index(name='flight_count').sort_values('flight_count', ascending=False).head(15)
-    
     fig = go.Figure()
-    
-    for _, row in top_origins.iterrows():
+
+    for _, row in origins_df.iterrows():
         orig = row['ORIGIN']
         count = row['flight_count']
         if orig in airport_coords:
@@ -279,8 +288,8 @@ def create_3d_arrivals_map(df):
                 lon=[orig_lon, ord_lon],
                 lat=[orig_lat, ord_lat],
                 mode='lines+markers',
-                line=dict(width=1.5, color='#0066CC'),
-                opacity=0.75,
+                line=dict(width=1, color='#0066CC'),
+                opacity=0.45,
                 hoverinfo='text',
                 text=f"{orig} ➔ ORD ({count:,} flights)",
                 showlegend=False
@@ -289,14 +298,14 @@ def create_3d_arrivals_map(df):
     fig.add_trace(go.Scattergeo(
         lon=[ord_lon], lat=[ord_lat],
         mode='markers+text',
-        marker=dict(size=10, color='#D00000', symbol='star'),
+        marker=dict(size=12, color='#D00000', symbol='star'),
         text=['Chicago (ORD)'],
         textposition='top center',
         showlegend=False
     ))
 
     fig.update_layout(
-        title=dict(text="🌐 3D Interactive Arrivals Globe Network", font=dict(size=15, color="#0f172a")),
+        title=dict(text="🌐 3D Dynamic Arrivals Globe (All Origins)", font=dict(size=15, color="#0f172a")),
         geo=dict(
             scope='north america',
             projection_type='orthographic',
@@ -308,7 +317,7 @@ def create_3d_arrivals_map(df):
             lakecolor="#E2E8F0",
             bgcolor="rgba(0,0,0,0)",
             center=dict(lat=38.0, lon=-97.0),
-            projection_scale=1.2
+            projection_scale=1.15
         ),
         margin=dict(l=0, r=0, t=35, b=0),
         height=380,
@@ -413,16 +422,22 @@ if page == "Arrivals Intelligence":
 
     st.markdown("---")
 
-    # 2. 3D Globe Network & Top Performers Breakdown
-    all_arrivals_df = conn.execute(f"SELECT * FROM flights WHERE \"DEST\" = 'ORD' {airline_filter}").df()
-    
+    # 2. 3D Globe Network & Top Performers Breakdown with View Switcher
     col_map, col_perf = st.columns([1.1, 1])
 
     with col_map:
-        st.plotly_chart(create_3d_arrivals_map(all_arrivals_df), use_container_width=True)
+        st.plotly_chart(create_3d_arrivals_map_all(conn, airline_filter), use_container_width=True)
 
     with col_perf:
         st.subheader("Top Performers Breakdown")
+        
+        # Interactive Toggle between Top Airlines and Top Origin Cities
+        chart_view = st.segmented_control(
+            "View Breakdown By:",
+            ["Top Airlines", "Top Origin Cities"],
+            default="Top Airlines"
+        )
+        
         measure = st.segmented_control(
             "Select Performance Metric:",
             ["Flights Count", "On-Time %", "Cancellations", "Avg Delay (min)"],
@@ -437,21 +452,30 @@ if page == "Arrivals Intelligence":
         }
         sql_val, sql_ord = measure_map[measure]
 
-        air_df = conn.execute(f"""
-            SELECT "AIRLINE_CODE" AS label, {sql_val} AS val
+        if chart_view == "Top Airlines":
+            group_col = "AIRLINE_CODE"
+            title_label = "Top 5 Airlines"
+            bar_color = "#0066CC"
+        else:
+            group_col = "ORIGIN"
+            title_label = "Top 5 Origin Cities"
+            bar_color = "#0A192F"
+
+        perf_df = conn.execute(f"""
+            SELECT "{group_col}" AS label, {sql_val} AS val
             FROM flights WHERE "DEST" = 'ORD' {airline_filter}
             GROUP BY label ORDER BY val {sql_ord} LIMIT 5
         """).df()
-        
-        fig_air = px.bar(
-            air_df, y='label', x='val', orientation='h',
-            labels={'label': 'Airline', 'val': measure},
-            title=f"Top 5 Airlines by {measure}"
+
+        fig_perf = px.bar(
+            perf_df, y='label', x='val', orientation='h',
+            labels={'label': chart_view, 'val': measure},
+            title=f"{title_label} by {measure}"
         )
-        fig_air.update_traces(marker_color='#0066CC')
-        fig_air = apply_light_plotly_theme(fig_air)
-        fig_air.update_layout(yaxis=dict(autorange="reversed"), margin=dict(l=10, r=10, t=30, b=10), height=280)
-        st.plotly_chart(fig_air, use_container_width=True)
+        fig_perf.update_traces(marker_color=bar_color)
+        fig_perf = apply_light_plotly_theme(fig_perf)
+        fig_perf.update_layout(yaxis=dict(autorange="reversed"), margin=dict(l=10, r=10, t=30, b=10), height=250)
+        st.plotly_chart(fig_perf, use_container_width=True)
 
     st.markdown("---")
 
