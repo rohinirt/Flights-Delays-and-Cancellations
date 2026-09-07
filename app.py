@@ -179,6 +179,9 @@ if selected_airline:
     airline_filter = f"AND \"AIRLINE_CODE\" IN ('{formatted_airlines}')"
 
 # Helper function to render Google Flight Card
+import textwrap
+
+# Helper function to render Google Flight Card
 def render_flight_card(row):
     origin_code = row['ORIGIN']
     origin_city = row['ORIGIN_CITY']
@@ -200,7 +203,8 @@ def render_flight_card(row):
     theme_color = "#D93025" if is_delayed else "#137333"
     delay_label = f"+{arr_delay}m delay" if is_delayed else f"{arr_delay}m delay" if arr_delay < 0 else "On Time"
 
-    st.markdown(f"""
+    # Wrap the HTML in textwrap.dedent() to prevent Streamlit from treating it as a code block
+    card_html = textwrap.dedent(f"""
     <div style="background-color: #ffffff; border: 1px solid #dadce0; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
         <div style="display: flex; justify-content: space-between; align-items: center; position: relative;">
             <div style="font-size: 2.4rem; font-weight: 700; color: #202124; line-height: 1;">{origin_code}</div>
@@ -243,7 +247,9 @@ def render_flight_card(row):
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
+    
+    st.markdown(card_html, unsafe_allow_html=True)
 
 # ==================== ARRIVALS INTELLIGENCE PAGE ====================
 if page == "Arrivals Intelligence":
