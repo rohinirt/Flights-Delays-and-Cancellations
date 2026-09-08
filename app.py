@@ -54,9 +54,11 @@ AIRPORT_CITY_NAMES = {
 # Global CSS Overrides
 st.markdown("""
 <style>
+    /* Force Light Canvas Background */
     .stApp {
         background-color: #F8FAFC !important;
     }
+    
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #FFFFFF !important;
         border-radius: 10px !important;
@@ -65,11 +67,14 @@ st.markdown("""
         box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
         margin-bottom: 12px !important;
     }
+
     div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] {
         border: none !important;
         box-shadow: none !important;
         padding: 0px !important;
     }
+
+    /* KPI Cards Styling */
     div[data-testid="stColumn"] > div {
         background-color: #FFFFFF !important;
         border: 1px solid #CBD5E1 !important;
@@ -77,18 +82,24 @@ st.markdown("""
         padding: 10px 6px 2px 6px !important;
         box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
     }
+
+    /* Segmented Control Styling */
     div[data-testid="stSegmentedControl"] {
         background-color: #F1F5F9 !important;
         border-radius: 8px !important;
         padding: 3px !important;
         margin-bottom: 8px !important;
     }
+
+    /* Dataframe Outer Wrapper & Canvas */
     div[data-testid="stDataFrame"], 
     div[data-testid="stDataFrame"] > div,
     div[data-testid="stDataFrame"] iframe {
         background-color: #FFFFFF !important;
         border-radius: 8px !important;
     }
+
+    /* Flight Cards Styling */
     .flight-clean-card {
         background-color: #FFFFFF;
         border: 1px solid #E2E8F0;
@@ -129,6 +140,8 @@ st.markdown("""
         background-color: #F0FDF4;
         color: #10B981;
     }
+
+    /* Sidebar Styling */
     section[data-testid="stSidebar"] {
         background-color: #0A192F !important;
     }
@@ -203,7 +216,11 @@ def apply_white_chart_theme(fig):
             tickfont=dict(color="#0f172a"),
             gridcolor="#f1f5f9"
         ),
-        legend=dict(font=dict(color="#0f172a"))
+        legend=dict(font=dict(color="#0f172a")),
+        coloraxis_colorbar=dict(
+            title=dict(font=dict(color="#0f172a")),
+            tickfont=dict(color="#0f172a")
+        )
     )
     return fig
 
@@ -238,11 +255,16 @@ def create_monthly_kpi_chart(data, x_col, y_col, bar_color="#0066CC"):
             title="",
             showline=False
         ),
-        yaxis=dict(visible=False, showgrid=False, fixedrange=True, autorange=True)
+        yaxis=dict(
+            visible=False, 
+            showgrid=False, 
+            fixedrange=True,
+            autorange=True
+        )
     )
     return fig
 
-# Dynamic Color-Coded 3D Arrivals Map
+# Dynamic 3D Globe Filtered by Selected Airline
 def create_3d_arrivals_map_all(conn, selected_airlines=None):
     where_clause = "WHERE \"DEST\" = 'ORD'"
     params = []
@@ -254,8 +276,7 @@ def create_3d_arrivals_map_all(conn, selected_airlines=None):
     origins_df = conn.execute(f"""
         SELECT 
             "ORIGIN",
-            COUNT(*) AS flight_count,
-            AVG(CASE WHEN "ARR_DELAY" <= 15 THEN 1 ELSE 0 END) * 100 AS on_time_pct
+            COUNT(*) AS flight_count
         FROM flights 
         {where_clause}
         GROUP BY "ORIGIN"
@@ -269,26 +290,17 @@ def create_3d_arrivals_map_all(conn, selected_airlines=None):
     for _, row in origins_df.iterrows():
         orig = row['ORIGIN']
         count = row['flight_count']
-        otp = row['on_time_pct']
         orig_lat, orig_lon = airport_coords.get(orig, (39.8283, -98.5795))
         
-        # Color-coding based on OTP %
-        if otp >= 85:
-            arc_color = '#10B981'  # Green (>85%)
-        elif otp >= 65:
-            arc_color = '#F59E0B'  # Amber (65%-85%)
-        else:
-            arc_color = '#EF4444'  # Red (<65%)
-
         fig.add_trace(go.Scattergeo(
             locationmode='USA-states',
             lon=[orig_lon, ord_lon],
             lat=[orig_lat, ord_lat],
             mode='lines+markers',
-            line=dict(width=1.5, color=arc_color),
-            opacity=0.6,
+            line=dict(width=1, color='#0066CC'),
+            opacity=0.45,
             hoverinfo='text',
-            text=f"{orig} ➔ ORD<br>Flights: {count:,}<br>On-Time %: {otp:.1f}%",
+            text=f"{orig} ➔ ORD ({count:,} flights)",
             showlegend=False
         ))
 
@@ -302,7 +314,7 @@ def create_3d_arrivals_map_all(conn, selected_airlines=None):
     ))
 
     fig.update_layout(
-        title=dict(text="🌐 3D Route Map (Green: >85% On-Time | Amber: 65-85% | Red: <65%)", font=dict(size=12, color="#0f172a")),
+        title=dict(text="🌐 3D Dynamic Arrivals Map", font=dict(size=14, color="#0f172a")),
         geo=dict(
             scope='north america',
             projection_type='orthographic',
@@ -322,6 +334,7 @@ def create_3d_arrivals_map_all(conn, selected_airlines=None):
     )
     return fig
 
+# Sankey Diagram Filtered strictly to Top 10 Airlines
 def create_airline_to_origin_sankey(conn, selected_airlines=None):
     where_clause = "WHERE \"DEST\" = 'ORD'"
     params = []
@@ -330,14 +343,24 @@ def create_airline_to_origin_sankey(conn, selected_airlines=None):
         where_clause += f" AND \"AIRLINE_CODE\" IN ({placeholders})"
         params.extend(selected_airlines)
 
+    # Restrict Sankey query to Top 10 Airlines by Flight Count
     sankey_data = conn.execute(f"""
+        WITH top_10_airlines AS (
+            SELECT "AIRLINE_CODE"
+            FROM flights
+            {where_clause}
+            GROUP BY "AIRLINE_CODE"
+            ORDER BY COUNT(*) DESC
+            LIMIT 10
+        )
         SELECT 
-            "AIRLINE_CODE",
-            "ORIGIN",
+            f."AIRLINE_CODE",
+            f."ORIGIN",
             COUNT(*) AS flight_count
-        FROM flights
+        FROM flights f
+        JOIN top_10_airlines t ON f."AIRLINE_CODE" = t."AIRLINE_CODE"
         {where_clause}
-        GROUP BY "AIRLINE_CODE", "ORIGIN"
+        GROUP BY f."AIRLINE_CODE", f."ORIGIN"
         ORDER BY flight_count DESC
     """, params).df()
 
@@ -352,6 +375,7 @@ def create_airline_to_origin_sankey(conn, selected_airlines=None):
     all_nodes = airlines_list + origins_list
     
     node_dict = {node: i for i, node in enumerate(all_nodes)}
+
     sources, targets, values = [], [], []
 
     for _, row in sankey_data.iterrows():
@@ -379,73 +403,12 @@ def create_airline_to_origin_sankey(conn, selected_airlines=None):
     )])
 
     fig.update_layout(
-        title=dict(text="🔀 Airline ➔ Origin Connectivity Flow", font=dict(size=14, color="#0F172A")),
+        title=dict(text="🔀 Airline ➔ Origin Connectivity Flow (Top 10 Airlines)", font=dict(size=14, color="#0F172A")),
         font=dict(size=10, color='#0F172A', family="sans-serif"),
         height=380,
         margin=dict(l=10, r=10, t=35, b=10),
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#FFFFFF"
-    )
-    return fig
-
-# Origin Hub Stress Test Quadrant Scatter Chart
-def create_origin_quadrant_chart(conn, selected_airlines=None):
-    where_clause = "WHERE \"DEST\" = 'ORD'"
-    params = []
-    if selected_airlines:
-        placeholders = ", ".join(["?"] * len(selected_airlines))
-        where_clause += f" AND \"AIRLINE_CODE\" IN ({placeholders})"
-        params.extend(selected_airlines)
-
-    quad_df = conn.execute(f"""
-        SELECT 
-            "ORIGIN",
-            COUNT(*) AS flight_volume,
-            AVG("ARR_DELAY") AS avg_delay
-        FROM flights
-        {where_clause}
-        GROUP BY "ORIGIN"
-        HAVING COUNT(*) > 5
-    """, params).df()
-
-    if quad_df.empty:
-        fig = go.Figure()
-        fig.add_annotation(text="No data for Quadrant Chart", showarrow=False)
-        return fig
-
-    quad_df['city_name'] = quad_df['ORIGIN'].apply(lambda x: AIRPORT_CITY_NAMES.get(x, x))
-    
-    avg_vol = quad_df['flight_volume'].mean()
-    avg_del = quad_df['avg_delay'].mean()
-
-    fig = px.scatter(
-        quad_df,
-        x='flight_volume',
-        y='avg_delay',
-        text='ORIGIN',
-        hover_name='city_name',
-        size='flight_volume',
-        color='avg_delay',
-        color_continuous_scale='Reds',
-        title="Origin Hub Stress Test (Volume vs. Avg Delay)"
-    )
-
-    fig.update_traces(
-        textposition='top center',
-        marker=dict(line=dict(width=1, color='#0F172A'))
-    )
-
-    # Add quadrant reference lines
-    fig.add_vline(x=avg_vol, line_dash="dash", line_color="#94A3B8", annotation_text="Avg Volume", annotation_position="top left")
-    fig.add_hline(y=avg_del, line_dash="dash", line_color="#94A3B8", annotation_text="Avg Delay", annotation_position="bottom right")
-
-    fig = apply_white_chart_theme(fig)
-    fig.update_layout(
-        height=380,
-        margin=dict(l=20, r=20, t=40, b=20),
-        xaxis_title="Flight Volume (Total Inbound)",
-        yaxis_title="Average Arrival Delay (Minutes)",
-        coloraxis_showscale=False
     )
     return fig
 
@@ -530,7 +493,7 @@ if page == "Arrivals Intelligence":
         ORDER BY month
     """, params).df()
 
-    # KPI Top Row
+    # KPI Top Row Section
     c1, c2, c3, c4, c5 = st.columns(5)
     
     with c1:
@@ -600,23 +563,7 @@ if page == "Arrivals Intelligence":
             }
             sql_val, sql_ord = measure_map[measure]
 
-            airlines_df = conn.execute(f"""
-                SELECT "AIRLINE_CODE" AS code, {sql_val} AS val
-                FROM flights {where_clause}
-                GROUP BY code ORDER BY val {sql_ord} LIMIT 10
-            """, params).df()
-            airlines_df['full_label'] = airlines_df['code'].apply(lambda x: f"{x} ({AIRLINE_NAMES.get(x, 'Carrier')})")
-
-            fig_air = px.bar(
-                airlines_df, y='full_label', x='val', orientation='h',
-                title=f"Top 10 Airlines by {measure}",
-                text_auto='.1f' if 'Delay' in measure or 'Time' in measure else True
-            )
-            fig_air.update_traces(marker_color="#0066CC", textposition="outside")
-            fig_air = apply_white_chart_theme(fig_air)
-            fig_air.update_layout(yaxis=dict(autorange="reversed", title=""), xaxis=dict(title=measure), margin=dict(l=10, r=25, t=35, b=10), height=320)
-            st.plotly_chart(fig_air, use_container_width=True)
-
+            # 1. Top 10 Origins Bar Chart (Swapped position: placed first)
             origins_df = conn.execute(f"""
                 SELECT "ORIGIN" AS code, {sql_val} AS val
                 FROM flights {where_clause}
@@ -634,6 +581,24 @@ if page == "Arrivals Intelligence":
             fig_orig.update_layout(yaxis=dict(autorange="reversed", title=""), xaxis=dict(title=measure), margin=dict(l=10, r=25, t=35, b=10), height=320)
             st.plotly_chart(fig_orig, use_container_width=True)
 
+            # 2. Top 10 Airlines Bar Chart (Swapped position: placed second)
+            airlines_df = conn.execute(f"""
+                SELECT "AIRLINE_CODE" AS code, {sql_val} AS val
+                FROM flights {where_clause}
+                GROUP BY code ORDER BY val {sql_ord} LIMIT 10
+            """, params).df()
+            airlines_df['full_label'] = airlines_df['code'].apply(lambda x: f"{x} ({AIRLINE_NAMES.get(x, 'Carrier')})")
+
+            fig_air = px.bar(
+                airlines_df, y='full_label', x='val', orientation='h',
+                title=f"Top 10 Airlines by {measure}",
+                text_auto='.1f' if 'Delay' in measure or 'Time' in measure else True
+            )
+            fig_air.update_traces(marker_color="#0066CC", textposition="outside")
+            fig_air = apply_white_chart_theme(fig_air)
+            fig_air.update_layout(yaxis=dict(autorange="reversed", title=""), xaxis=dict(title=measure), margin=dict(l=10, r=25, t=35, b=10), height=320)
+            st.plotly_chart(fig_air, use_container_width=True)
+
     with col_right:
         with st.container(border=True):
             st.plotly_chart(create_3d_arrivals_map_all(conn, selected_airline), use_container_width=True)
@@ -641,7 +606,7 @@ if page == "Arrivals Intelligence":
         with st.container(border=True):
             st.plotly_chart(create_airline_to_origin_sankey(conn, selected_airline), use_container_width=True)
 
-    # Flight Cards
+    # Clean Readable Flight Cards Section
     col_longest, col_delayed = st.columns(2)
 
     with col_longest:
@@ -680,7 +645,7 @@ if page == "Arrivals Intelligence":
             for idx, row in delayed_df.iterrows():
                 render_flight_card_clean(row, is_delayed=True)
 
-    # Heatmap & Delay Drivers
+    # Temporal Heatmap & Vertical Delay Bar Drivers
     c_heat, c_delay = st.columns([1.3, 1])
 
     with c_heat:
@@ -765,11 +730,7 @@ if page == "Arrivals Intelligence":
             )
             st.plotly_chart(fig_delay_bar, use_container_width=True)
 
-    # NEW ADVANCED SECTION: Origin Hub Stress Test (Quadrant Chart)
-    with st.container(border=True):
-        st.plotly_chart(create_origin_quadrant_chart(conn, selected_airline), use_container_width=True)
-
-    # Records Dataframe Table
+    # Pure White Dataframe Table Section
     with st.container(border=True):
         st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 10px;'>📋 Inbound Flight Records Table</div>", unsafe_allow_html=True)
         table_df = conn.execute(f"""
@@ -778,6 +739,48 @@ if page == "Arrivals Intelligence":
             ORDER BY "FL_DATE" DESC LIMIT 100
         """, params).df()
         st.dataframe(table_df, use_container_width=True, height=280)
+
+    # Origin Hub Stress Test (Quadrant Chart) - Added at the bottom without data labels
+    with st.container(border=True):
+        st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>🎯 Origin Hub Stress Test (Volume vs. Avg Delay Risk)</div>", unsafe_allow_html=True)
+        
+        quadrant_df = conn.execute(f"""
+            SELECT 
+                "ORIGIN",
+                COUNT(*) AS flight_count,
+                AVG("ARR_DELAY") AS avg_delay
+            FROM flights {where_clause}
+            GROUP BY "ORIGIN"
+            HAVING flight_count > 10
+        """, params).df()
+
+        if not quadrant_df.empty:
+            avg_vol = quadrant_df['flight_count'].mean()
+            avg_del = quadrant_df['avg_delay'].mean()
+
+            fig_quad = px.scatter(
+                quadrant_df,
+                x='flight_count',
+                y='avg_delay',
+                hover_data=['ORIGIN'],
+                size='flight_count',
+                color='avg_delay',
+                color_continuous_scale='Reds'
+            )
+            
+            # Draw quadrant reference lines
+            fig_quad.add_hline(y=avg_del, line_dash="dash", line_color="#94A3B8")
+            fig_quad.add_vline(x=avg_vol, line_dash="dash", line_color="#94A3B8")
+
+            fig_quad = apply_white_chart_theme(fig_quad)
+            fig_quad.update_layout(
+                height=320,
+                margin=dict(l=10, r=10, t=10, b=10),
+                xaxis=dict(title="Total Flight Volume"),
+                yaxis=dict(title="Average Delay (Minutes)"),
+                coloraxis_showscale=False
+            )
+            st.plotly_chart(fig_quad, use_container_width=True)
 
 # ==================== OTHER PAGES ====================
 elif page == "Departures Intelligence":
