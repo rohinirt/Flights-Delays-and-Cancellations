@@ -488,7 +488,7 @@ if page == "Arrivals Intelligence":
 
     with col_right:
         with st.container(border=True):
-            map_airline = st.selectbox("Filter Map by Airline:", ["All Airlines"] + airlines)
+            # map_airline = st.selectbox("Filter Map by Airline:", ["All Airlines"] + airlines)
             st.plotly_chart(create_3d_arrivals_map_all(conn), use_container_width=True)
 
         with st.container(border=True):
