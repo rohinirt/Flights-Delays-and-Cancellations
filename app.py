@@ -48,10 +48,9 @@ AIRPORT_CITY_NAMES = {
     'SAN': 'San Diego', 'SLC': 'Salt Lake City'
 }
 
-# Compact Dashboard Custom CSS (Strips out extra padding on Top, Bottom, Left & Right)
+# Compact CSS with tight paddings
 st.markdown("""
 <style>
-    /* Remove default Streamlit whitespace/padding */
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 1rem !important;
@@ -62,7 +61,6 @@ st.markdown("""
 
     .stApp { background-color: #F8FAFC !important; }
 
-    /* Compact container styling */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #FFFFFF !important;
         border-radius: 8px !important;
@@ -220,7 +218,7 @@ def create_3d_arrivals_map_all(conn):
     origins_df = conn.execute("""
         SELECT "ORIGIN", COUNT(*) AS flight_count
         FROM flights 
-        WHERE "DEST" = 'ORD'
+        WHERE "DEST" ILIKE 'ORD'
         GROUP BY "ORIGIN" 
         ORDER BY flight_count DESC
     """).df()
@@ -285,7 +283,7 @@ def create_airline_connectivity_barchart(conn):
 
         if airline_col and origin_col:
             if dest_col:
-                filtered_df = raw_df[raw_df[dest_col] == 'ORD']
+                filtered_df = raw_df[raw_df[dest_col].str.upper() == 'ORD']
             else:
                 filtered_df = raw_df
 
@@ -334,22 +332,25 @@ def create_airline_connectivity_barchart(conn):
     )
     return fig
 
-def create_airline_radar_chart(conn, where_clause="WHERE \"DEST\" = 'ORD'", params=None):
-    """Radar Chart benchmarking top airlines across 4 core operational metrics."""
-    if params is None:
-        params = []
-        
+def create_airline_radar_chart(conn, selected_airlines=None):
+    """Radar Chart benchmarking top airlines across 4 core operational metrics safely."""
     try:
-        # Detect exact column name dynamically
         cols_df = conn.execute("DESCRIBE flights").df()
-        cols = cols_df['column_name'].tolist()
+        cols = [c.upper() for c in cols_df['column_name'].tolist()]
         
         airline_col = '"AIRLINE_CODE"' if 'AIRLINE_CODE' in cols else ('"AIRLINE"' if 'AIRLINE' in cols else ('"OP_UNIQUE_CARRIER"' if 'OP_UNIQUE_CARRIER' in cols else None))
         
         if not airline_col:
             fig = go.Figure()
-            fig.add_annotation(text="Airline column not found in database", showarrow=False)
+            fig.add_annotation(text="Airline column not found in dataset", showarrow=False)
             return fig
+
+        where_cond = "WHERE UPPER(\"DEST\") = 'ORD'"
+        params = []
+        if selected_airlines:
+            placeholders = ", ".join(["?"] * len(selected_airlines))
+            where_cond += f" AND {airline_col} IN ({placeholders})"
+            params.extend(selected_airlines)
 
         query = f"""
             SELECT 
@@ -359,9 +360,9 @@ def create_airline_radar_chart(conn, where_clause="WHERE \"DEST\" = 'ORD'", para
                 ROUND(AVG(CASE WHEN "ARR_DELAY" > 0 THEN "ARR_DELAY" ELSE 0.0 END), 2) AS avg_delay,
                 ROUND(AVG(CASE WHEN "CANCELLED" = 1 THEN 1.0 ELSE 0.0 END) * 100, 2) AS cancellation_rate
             FROM flights
-            {where_clause} AND {airline_col} IS NOT NULL
+            {where_cond} AND {airline_col} IS NOT NULL
             GROUP BY airline
-            HAVING COUNT(*) > 5
+            HAVING COUNT(*) > 0
             ORDER BY total_flights DESC
             LIMIT 6
         """
@@ -371,12 +372,12 @@ def create_airline_radar_chart(conn, where_clause="WHERE \"DEST\" = 'ORD'", para
 
     if df.empty:
         fig = go.Figure()
-        fig.add_annotation(text="No airline performance data available for current selection", showarrow=False)
+        fig.add_annotation(text="No airline performance data found for selected filter", showarrow=False)
         return fig
 
     categories = ['Flights (Scaled)', 'Cancellation Rate (%)', 'Avg Delay (mins)', 'On-Time %']
     
-    max_flights = df['total_flights'].max() if not df['total_flights'].empty else 1
+    max_flights = df['total_flights'].max() if not df['total_flights'].empty and df['total_flights'].max() > 0 else 1
     df['flights_scaled'] = (df['total_flights'] / max_flights) * 100
 
     fig = go.Figure()
@@ -464,10 +465,9 @@ page = st.sidebar.radio("Navigation", ["Arrivals Intelligence", "Departures Inte
 st.sidebar.markdown("---")
 st.sidebar.subheader("Filter Data")
 
-# Get airlines list safely
 try:
     cols_df = conn.execute("DESCRIBE flights").df()
-    cols = cols_df['column_name'].tolist()
+    cols = [c.upper() for c in cols_df['column_name'].tolist()]
     airline_col_name = 'AIRLINE_CODE' if 'AIRLINE_CODE' in cols else ('AIRLINE' if 'AIRLINE' in cols else 'OP_UNIQUE_CARRIER')
     airlines = conn.execute(f'SELECT DISTINCT "{airline_col_name}" FROM flights WHERE "{airline_col_name}" IS NOT NULL').df().iloc[:, 0].dropna().tolist()
 except Exception:
@@ -475,7 +475,7 @@ except Exception:
 
 selected_airline = st.sidebar.multiselect("Select Airline", options=airlines, default=[])
 
-where_clause = "WHERE \"DEST\" = 'ORD'"
+where_clause = "WHERE UPPER(\"DEST\") = 'ORD'"
 params = []
 if selected_airline:
     placeholders = ", ".join(["?"] * len(selected_airline))
@@ -594,7 +594,7 @@ if page == "Arrivals Intelligence":
         with st.container(border=True):
             st.plotly_chart(create_airline_connectivity_barchart(conn), use_container_width=True)
 
-    # Simplified Flight Cards Section
+    # Flight Cards Section
     col_longest, col_delayed = st.columns(2)
 
     with col_longest:
@@ -687,9 +687,9 @@ if page == "Arrivals Intelligence":
         """, params).df()
         st.dataframe(table_df, use_container_width=True, height=240)
 
-    # Fixed Airline Radar Chart Section
+    # Fixed Radar Chart Section
     with st.container(border=True):
-        st.plotly_chart(create_airline_radar_chart(conn, where_clause, params), use_container_width=True)
+        st.plotly_chart(create_airline_radar_chart(conn, selected_airline), use_container_width=True)
 
 # ==================== OTHER PAGES ====================
 elif page == "Departures Intelligence":
