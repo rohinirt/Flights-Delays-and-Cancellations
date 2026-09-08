@@ -268,31 +268,46 @@ def create_3d_arrivals_map_all(conn, map_airline_filter=None):
     return fig
 
 def create_airline_connectivity_barchart(conn):
-    # Aggregates unique origin routes and total flights per carrier
-    query = """
-        SELECT 
-            "AIRLINE_CODE" AS airline,
-            COUNT(DISTINCT "ORIGIN") AS unique_routes,
-            COUNT(*) AS total_flights
-        FROM flights
-        WHERE "DEST" = 'ORD' AND "AIRLINE_CODE" IS NOT NULL
-        GROUP BY airline
-        ORDER BY unique_routes DESC, total_flights DESC
-        LIMIT 10
-    """
-    
     try:
-        df = conn.execute(query).df()
-    except Exception:
-        df = pd.DataFrame(columns=['airline', 'unique_routes', 'total_flights'])
+        # Load raw data safely without case-sensitive quoted aliases
+        raw_df = conn.execute("SELECT * FROM flights LIMIT 10000").df()
+        
+        # Standardize column names to uppercase
+        raw_df.columns = [c.upper() for c in raw_df.columns]
+        
+        # Determine airline and origin columns dynamically
+        airline_col = 'AIRLINE_CODE' if 'AIRLINE_CODE' in raw_df.columns else ('AIRLINE' if 'AIRLINE' in raw_df.columns else None)
+        origin_col = 'ORIGIN' if 'ORIGIN' in raw_df.columns else None
+        dest_col = 'DEST' if 'DEST' in raw_df.columns else None
+
+        if airline_col and origin_col:
+            # Filter for ORD if destination column exists
+            if dest_col:
+                filtered_df = raw_df[raw_df[dest_col] == 'ORD']
+            else:
+                filtered_df = raw_df
+
+            # Group and aggregate in Pandas
+            df = filtered_df.groupby(airline_col).agg(
+                unique_routes=(origin_col, 'nunique'),
+                total_flights=(origin_col, 'count')
+            ).reset_index()
+
+            df = df.rename(columns={airline_col: 'airline'})
+            df = df.sort_values(by=['unique_routes', 'total_flights'], ascending=[False, False]).head(10)
+        else:
+            df = pd.DataFrame()
+
+    except Exception as e:
+        df = pd.DataFrame()
 
     if df.empty:
         fig = go.Figure()
-        fig.add_annotation(text="No data available", showarrow=False)
+        fig.add_annotation(text="No data available - Check Dataset Columns", showarrow=False)
         return fig
 
     # Map carrier codes to names
-    df['airline_name'] = df['airline'].apply(lambda x: f"{x} ({AIRLINE_NAMES.get(x, 'Carrier')})")
+    df['airline_name'] = df['airline'].apply(lambda x: f"{x} ({AIRLINE_NAMES.get(str(x), 'Carrier')})")
 
     fig = px.bar(
         df,
@@ -300,14 +315,13 @@ def create_airline_connectivity_barchart(conn):
         x='unique_routes',
         orientation='h',
         text='unique_routes',
-        hover_data={'total_flights': ':,', 'unique_routes': True, 'airline_name': False},
-        labels={'unique_routes': 'Direct Connected Hubs', 'airline_name': 'Airline', 'total_flights': 'Total Flights'}
+        labels={'unique_routes': 'Direct Connected Hubs', 'airline_name': 'Airline'}
     )
 
     fig.update_traces(
         marker_color='#0066CC',
         textposition='outside',
-        hovertemplate="<b>%{y}</b><br>Connected Origins: %{x}<br>Total Flights: %{customdata[0]:,}<extra></extra>"
+        hovertemplate="<b>%{y}</b><br>Connected Origins: %{x}<extra></extra>"
     )
 
     fig = apply_white_chart_theme(fig)
