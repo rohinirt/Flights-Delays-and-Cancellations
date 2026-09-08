@@ -1,7 +1,20 @@
 import streamlit as st
 import duckdb
 
-# Global Page Config - Forces sidebar to stay visible
+# Define Pages using st.Page
+main_page = st.Page("app.py", title="Home Overview", icon="🏠", default=True)
+arrivals_page = st.Page("pages/1_🛬_Arrivals_Intelligence.py", title="Arrivals Intelligence", icon="🛬")
+departures_page = st.Page("pages/2_🛫_Departures_Intelligence.py", title="Departures Intelligence", icon="🛫")
+predictor_page = st.Page("pages/3_🔮_Delay_Predictor.py", title="Delay Predictor", icon="🔮")
+deep_dive_page = st.Page("pages/4_🔍_Flight_Deep_Dive.py", title="Flight Deep Dive", icon="🔍")
+
+# Initialize Navigation Router
+pg = st.navigation({
+    "Overview": [main_page],
+    "Analytics & ML": [arrivals_page, departures_page, predictor_page, deep_dive_page]
+})
+
+# Global Page Configuration
 st.set_page_config(
     page_title="Chicago O'Hare (ORD) Intelligence",
     page_icon="✈️",
@@ -9,17 +22,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Simplified CSS (Removes dark sidebar overrides that hid page navigation)
-st.markdown("""
-<style>
-    .block-container { 
-        padding-top: 1rem !important; 
-        padding-bottom: 1rem !important; 
-        max-width: 100% !important; 
-    }
-</style>
-""", unsafe_allow_html=True)
-
+# Shared Database Connection & Caching
 @st.cache_resource
 def get_db_connection():
     return duckdb.connect(database=':memory:')
@@ -37,29 +40,20 @@ try:
     load_data()
 except Exception as e:
     st.error(f"Error loading dataset: {e}. Ensure 'flights_2022.csv' is in the root directory.")
-    st.stop()
 
-# Sidebar fallback navigation
-with st.sidebar:
-    st.title("✈️ Navigation")
-    st.info("Select a page below if multi-page links are not appearing above:")
-    
-    st.page_link("app.py", label="Home Overview", icon="🏠")
-    st.page_link("pages/1_🛬_Arrivals_Intelligence.py", label="Arrivals Intelligence", icon="🛬")
-    st.page_link("pages/2_🛫_Departures_Intelligence.py", label="Departures Intelligence", icon="🛫")
-    st.page_link("pages/3_🔮_Delay_Predictor.py", label="Delay Predictor", icon="🔮")
-    st.page_link("pages/4_🔍_Flight_Deep_Dive.py", label="Flight Deep Dive", icon="🔍")
+# Render Selected Page Content
+if pg == main_page:
+    st.title("✈️ Chicago O'Hare (ORD) Flight Intelligence")
+    st.markdown("""
+    Welcome to the Operational Dashboard & Predictive Modeling System for Chicago O'Hare International Airport.
 
-# Main Page Dashboard
-st.title("✈️ Chicago O'Hare (ORD) Flight Intelligence")
-st.markdown("""
-Welcome to the Operational Dashboard & Predictive Modeling System for Chicago O'Hare International Airport.
+    ### **Navigation Overview**
+    Use the sidebar menu to navigate through operational analytics and predictive models:
 
-### **Navigation Overview**
-Use the sidebar on the left to navigate across modules:
-
-* **🛬 Arrivals Intelligence:** Operational metrics, delay breakdowns, and inbound route maps.
-* **🛫 Departures Intelligence:** Outbound throughput, destination hubs, and performance charts.
-* **🔮 Delay Predictor:** Machine Learning classification for delay probability & severity tiers.
-* **🔍 Flight Deep-Dive:** Head-to-head route analysis, carrier efficiency, and time-of-day dynamics.
-""")
+    * **🛬 Arrivals Intelligence:** Operational metrics, delay breakdowns, and inbound route analytics.
+    * **🛫 Departures Intelligence:** Outbound throughput, destination hubs, and performance metrics.
+    * **🔮 Delay Predictor:** Machine Learning classification for delay probability & severity tiers.
+    * **🔍 Flight Deep-Dive:** Head-to-head route analysis, carrier efficiency, and time-of-day dynamics.
+    """)
+else:
+    pg.run()
