@@ -3,8 +3,8 @@ import duckdb
 
 # Define Pages using st.Page
 main_page = st.Page("app.py", title="Home Overview", icon="🏠", default=True)
-arrivals_page = st.Page("pages/1_🛬_Arrivals_Intelligence.py", title="Arrivals Intelligence", icon="🛬")
-departures_page = st.Page("pages/2_🛫_Departures_Intelligence.py", title="Departures Intelligence", icon="🛫")
+arrivals_page = st.Page("pages/1_🛬_Arrivals.py", title="Arrivals Intelligence", icon="🛬")
+departures_page = st.Page("pages/2_🛫_Departures.py", title="Departures Intelligence", icon="🛫")
 predictor_page = st.Page("pages/3_🔮_Delay_Predictor.py", title="Delay Predictor", icon="🔮")
 deep_dive_page = st.Page("pages/4_🔍_Flight_Deep_Dive.py", title="Flight Deep Dive", icon="🔍")
 
