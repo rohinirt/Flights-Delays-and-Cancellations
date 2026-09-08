@@ -51,60 +51,62 @@ AIRPORT_CITY_NAMES = {
     'SAN': 'San Diego', 'SLC': 'Salt Lake City'
 }
 
-# Global CSS Overrides
+# Fully updated CSS targeting Streamlit's structural elements
 st.markdown("""
 <style>
-    /* Force Light Canvas Background */
-    .stApp {
+    /* 1. Global Page Background */
+    .stApp, [data-testid="stAppViewContainer"] {
         background-color: #F8FAFC !important;
     }
-    
-    /* Ensure Native Streamlit Bordered Containers ONLY Have One Outer Border */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #FFFFFF !important;
-        border-radius: 10px !important;
-        border: 1px solid #CBD5E1 !important;
-        padding: 16px !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
-        margin-bottom: 12px !important;
-    }
 
-    /* Remove standard inner container borders from column children */
-    div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] {
+    /* 2. Remove Double Borders: Force inner containers inside columns to be borderless */
+    [data-testid="stColumn"] [data-testid="stVerticalBlockBorderWrapper"] {
         border: none !important;
         box-shadow: none !important;
+        background-color: transparent !important;
         padding: 0px !important;
     }
 
-    /* Consolidated KPI Top Card Styling */
-    div[data-testid="stColumn"] > div {
+    /* 3. Global Card Styling: Apply a single outer border to main containers */
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #FFFFFF !important;
+        border: 1px solid #CBD5E1 !important;
+        border-radius: 10px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+        padding: 16px !important;
+    }
+
+    /* 4. KPI Top Cards Styling */
+    [data-testid="stColumn"] > div {
         background-color: #FFFFFF !important;
         border: 1px solid #CBD5E1 !important;
         border-radius: 10px !important;
         padding: 10px 6px 2px 6px !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
     }
 
-    /* Segmented Control Styling */
-    div[data-testid="stSegmentedControl"] {
-        background-color: #F1F5F9 !important;
-        border-radius: 8px !important;
-        padding: 3px !important;
-        margin-bottom: 8px !important;
-    }
-
-    /* Pure White Dataframe Outer Wrapper & Canvas */
-    div[data-testid="stDataFrame"], 
-    div[data-testid="stDataFrame"] > div,
-    div[data-testid="stDataFrame"] iframe {
+    /* 5. Force Pure White Background on Plotly Chart Wrappers */
+    .stPlotlyChart, [data-testid="stPlotlyChart"] {
         background-color: #FFFFFF !important;
         border-radius: 8px !important;
     }
 
+    /* 6. Force Pure White Background on Inbound Records Table (st.dataframe) */
+    [data-testid="stDataFrame"], 
+    [data-testid="stDataFrame"] > div,
+    [data-testid="stDataFrame"] iframe,
+    .stDataFrame {
+        background-color: #FFFFFF !important;
+    }
+    
+    /* Target Glide-Data-Grid canvas (Streamlit 1.30+ Dataframe renderer) */
+    div[data-testid="stDataFrame"] canvas {
+        background-color: #FFFFFF !important;
+    }
+
     /* Simplified Readable Flight Cards */
     .flight-clean-card {
-        background-color: #FFFFFF;
-        border: 1px solid #E2E8F0;
+        background-color: #FFFFFF !important;
+        border: 1px solid #E2E8F0 !important;
         border-radius: 8px;
         padding: 8px 12px;
         margin-bottom: 8px;
@@ -113,10 +115,10 @@ st.markdown("""
         align-items: center;
     }
     .flight-clean-card.delayed {
-        border-left: 4px solid #D00000;
+        border-left: 4px solid #D00000 !important;
     }
     .flight-clean-card.normal {
-        border-left: 4px solid #0066CC;
+        border-left: 4px solid #0066CC !important;
     }
     .flight-code-title {
         font-size: 0.88rem;
@@ -143,7 +145,7 @@ st.markdown("""
         color: #10B981;
     }
 
-    /* Sidebar Styling */
+    /* Sidebar Dark Styling */
     section[data-testid="stSidebar"] {
         background-color: #0A192F !important;
     }
