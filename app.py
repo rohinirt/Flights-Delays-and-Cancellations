@@ -51,24 +51,15 @@ AIRPORT_CITY_NAMES = {
     'SAN': 'San Diego', 'SLC': 'Salt Lake City'
 }
 
-# Global CSS Adjustments
+# Global CSS Overrides
 st.markdown("""
 <style>
-    /* Canvas Background */
+    /* Force Light Canvas Background */
     .stApp {
         background-color: #F8FAFC !important;
     }
     
-    /* Consolidated KPI Box Border Styling (Only single outer border) */
-    div[data-testid="stColumn"] > div {
-        background-color: #FFFFFF !important;
-        border: 1px solid #CBD5E1 !important;
-        border-radius: 10px !important;
-        padding: 10px 6px 2px 6px !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
-    }
-
-    /* Outer Wrapper Container Styles */
+    /* Ensure Native Streamlit Bordered Containers ONLY Have One Outer Border */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #FFFFFF !important;
         border-radius: 10px !important;
@@ -76,6 +67,22 @@ st.markdown("""
         padding: 16px !important;
         box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
         margin-bottom: 12px !important;
+    }
+
+    /* Remove standard inner container borders from column children */
+    div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] {
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0px !important;
+    }
+
+    /* Consolidated KPI Top Card Styling */
+    div[data-testid="stColumn"] > div {
+        background-color: #FFFFFF !important;
+        border: 1px solid #CBD5E1 !important;
+        border-radius: 10px !important;
+        padding: 10px 6px 2px 6px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
     }
 
     /* Segmented Control Styling */
@@ -86,15 +93,12 @@ st.markdown("""
         margin-bottom: 8px !important;
     }
 
-    /* Clean Streamlit Dataframe Background */
-    div[data-testid="stDataFrame"] {
+    /* Pure White Dataframe Outer Wrapper & Canvas */
+    div[data-testid="stDataFrame"], 
+    div[data-testid="stDataFrame"] > div,
+    div[data-testid="stDataFrame"] iframe {
         background-color: #FFFFFF !important;
         border-radius: 8px !important;
-    }
-
-    /* Streamlit Dataframe Table Override */
-    div[data-testid="stDataFrame"] > div {
-        background-color: #FFFFFF !important;
     }
 
     /* Simplified Readable Flight Cards */
@@ -355,7 +359,6 @@ def create_airline_to_origin_sankey(conn, selected_airlines=None):
         fig.add_annotation(text="No data available for Sankey diagram", showarrow=False)
         return fig
 
-    # Sort airlines by overall flight volume / connectivity
     airline_totals = sankey_data.groupby('AIRLINE_CODE')['flight_count'].sum().sort_values(ascending=False)
     airlines_list = list(airline_totals.index)
     origins_list = list(sankey_data['ORIGIN'].unique())
@@ -399,7 +402,6 @@ def create_airline_to_origin_sankey(conn, selected_airlines=None):
     )
     return fig
 
-# Simplified Readable Flight Card Rendering
 def render_flight_card_clean(row, is_delayed=False):
     origin_code = row['ORIGIN']
     airline_code = row['AIRLINE_CODE']
@@ -535,7 +537,6 @@ if page == "Arrivals Intelligence":
     col_left, col_right = st.columns([1, 1])
 
     with col_left:
-        # Segmented Control & Top 10 Bar Charts grouped in a single outer border container
         with st.container(border=True):
             measure = st.segmented_control(
                 "",
@@ -589,15 +590,13 @@ if page == "Arrivals Intelligence":
             st.plotly_chart(fig_orig, use_container_width=True)
 
     with col_right:
-        # 3D Globe Map Container
         with st.container(border=True):
             st.plotly_chart(create_3d_arrivals_map_all(conn, selected_airline), use_container_width=True)
 
-        # Airline to Origin Sankey Chart Container
         with st.container(border=True):
             st.plotly_chart(create_airline_to_origin_sankey(conn, selected_airline), use_container_width=True)
 
-    # Simplified Readable Flight Cards Section
+    # Clean Readable Flight Cards Section
     col_longest, col_delayed = st.columns(2)
 
     with col_longest:
@@ -671,7 +670,6 @@ if page == "Arrivals Intelligence":
 
             pivot_heat = heat_df.pivot(index='row_dim', columns='hour', values='flights').fillna(0)
             
-            # Using go.Heatmap directly prevents PX title="undefined" bugs
             fig_heat = go.Figure(data=go.Heatmap(
                 z=pivot_heat.values,
                 x=pivot_heat.columns,
@@ -722,7 +720,7 @@ if page == "Arrivals Intelligence":
             )
             st.plotly_chart(fig_delay_bar, use_container_width=True)
 
-    # Pure White Background Flight Table Section
+    # Pure White Dataframe Table Section
     with st.container(border=True):
         st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 10px;'>📋 Inbound Flight Records Table</div>", unsafe_allow_html=True)
         table_df = conn.execute(f"""
