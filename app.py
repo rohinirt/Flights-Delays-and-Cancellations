@@ -333,7 +333,7 @@ def create_airline_connectivity_barchart(conn):
     return fig
 
 def create_airline_radar_chart(conn, selected_airline_code=None):
-    """Single radar chart dedicated to one filtered airline."""
+    """Radar chart with standardized 0-100 metrics across all airlines."""
     try:
         df_raw = conn.execute("SELECT * FROM flights").df()
         df_raw.columns = [c.upper() for c in df_raw.columns]
@@ -349,52 +349,69 @@ def create_airline_radar_chart(conn, selected_airline_code=None):
             fig.add_annotation(text="Airline column not found", showarrow=False)
             return fig
 
+        # Filter for ORD arrivals
         if 'DEST' in df_raw.columns:
-            df_filtered = df_raw[df_raw['DEST'].astype(str).str.upper() == 'ORD'].copy()
+            df_ord = df_raw[df_raw['DEST'].astype(str).str.upper() == 'ORD'].copy()
         else:
-            df_filtered = df_raw.copy()
+            df_ord = df_raw.copy()
 
-        df_filtered = df_filtered.dropna(subset=[airline_col])
+        df_ord = df_ord.dropna(subset=[airline_col])
 
-        # Default to top carrier if none specified
-        if not selected_airline_code:
-            top_carrier = df_filtered[airline_col].value_counts().index[0]
-            selected_airline_code = top_carrier
-
-        df_filtered = df_filtered[df_filtered[airline_col].astype(str) == str(selected_airline_code)]
-
-        if df_filtered.empty:
+        if df_ord.empty:
             fig = go.Figure()
-            fig.add_annotation(text=f"No flight data for {selected_airline_code}", showarrow=False)
+            fig.add_annotation(text="No flight data found", showarrow=False)
             return fig
 
-        # Scale relative to max flights in the dataset
-        global_max_flights = df_raw.groupby(airline_col).size().max() or 1
+        # Pre-aggregate metrics for ALL airlines to calculate standardized scale
+        arr_delay_col = df_ord['ARR_DELAY'] if 'ARR_DELAY' in df_ord.columns else pd.Series(0, index=df_ord.index)
+        cancelled_col = df_ord['CANCELLED'] if 'CANCELLED' in df_ord.columns else pd.Series(0, index=df_ord.index)
 
-        arr_delay = df_filtered['ARR_DELAY'] if 'ARR_DELAY' in df_filtered.columns else pd.Series(0, index=df_filtered.index)
-        cancelled = df_filtered['CANCELLED'] if 'CANCELLED' in df_filtered.columns else pd.Series(0, index=df_filtered.index)
+        df_ord['is_ontime'] = (arr_delay_col <= 15).astype(int)
+        df_ord['pos_delay'] = arr_delay_col.apply(lambda x: x if pd.notna(x) and x > 0 else 0)
+        df_ord['is_cancelled'] = (cancelled_col == 1).astype(int)
 
-        total_flights = len(df_filtered)
-        on_time_pct = round((arr_delay <= 15).mean() * 100, 2)
-        pos_delays = arr_delay[arr_delay > 0]
-        avg_delay = round(pos_delays.mean(), 2) if not pos_delays.empty else 0.0
-        cancellation_rate = round((cancelled == 1).mean() * 100, 2)
-        flights_scaled = (total_flights / global_max_flights) * 100
+        all_stats = df_ord.groupby(airline_col).agg(
+            total_flights=(airline_col, 'count'),
+            on_time_pct=('is_ontime', lambda x: round(x.mean() * 100, 2)),
+            avg_delay=('pos_delay', lambda x: round(x.mean(), 2)),
+            cancellation_rate=('is_cancelled', lambda x: round(x.mean() * 100, 2))
+        ).reset_index()
+
+        # Min-Max Normalization (0 - 100) across dataset
+        max_f = all_stats['total_flights'].max()
+        min_f = all_stats['total_flights'].min()
+        
+        # Avoid divide-by-zero if min == max
+        all_stats['flights_score'] = all_stats['total_flights'].apply(
+            lambda x: round(((x - min_f) / (max_f - min_f)) * 100, 2) if max_f > min_f else 100
+        )
+
+        # Default to top airline if none selected
+        if not selected_airline_code or selected_airline_code not in all_stats[airline_col].astype(str).values:
+            selected_airline_code = all_stats.sort_values('total_flights', ascending=False).iloc[0][airline_col]
+
+        row = all_stats[all_stats[airline_col].astype(str) == str(selected_airline_code)].iloc[0]
+
+        total_flights = int(row['total_flights'])
+        on_time_pct = float(row['on_time_pct'])
+        avg_delay = float(row['avg_delay'])
+        cancellation_rate = float(row['cancellation_rate'])
+        flights_score = float(row['flights_score'])
 
     except Exception as e:
         fig = go.Figure()
         fig.add_annotation(text=f"Radar calculation error: {str(e)}", showarrow=False)
         return fig
 
-    categories = ['Flights (Scaled)', 'Cancellation Rate (%)', 'Avg Delay (mins)', 'On-Time %']
-    r_values = [flights_scaled, cancellation_rate, avg_delay, on_time_pct]
+    categories = ['Volume Score (0-100)', 'Cancellation Rate (%)', 'Avg Delay (mins)', 'On-Time %']
+    r_values = [flights_score, cancellation_rate, avg_delay, on_time_pct]
 
     carrier_name = AIRLINE_NAMES.get(str(selected_airline_code), 'Carrier')
     airline_label = f"{selected_airline_code} ({carrier_name})"
 
     hover_text = (
         f"<b>{airline_label}</b><br>"
-        f"Total Flights: {total_flights:,}<br>"
+        f"Total Flights: {total_flights:,} (Relative Score: {flights_score}/100)<br>"
         f"Cancellation Rate: {cancellation_rate}%<br>"
         f"Avg Delay: {avg_delay} mins<br>"
         f"On-Time: {on_time_pct}%"
