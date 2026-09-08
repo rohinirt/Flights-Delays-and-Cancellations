@@ -267,57 +267,56 @@ def create_3d_arrivals_map_all(conn, map_airline_filter=None):
     )
     return fig
 
-def create_parallel_categories_connectivity(conn, *args, **kwargs):
-    # Direct aggregation without subquery JOINs to guarantee records render
+def create_airline_connectivity_barchart(conn):
+    # Aggregates unique origin routes and total flights per carrier
     query = """
         SELECT 
-            "AIRLINE_CODE" AS Airline,
-            "ORIGIN" AS Origin,
-            CASE WHEN "ARR_DELAY" <= 15 THEN 'On-Time' ELSE 'Delayed' END AS Status,
-            COUNT(*) AS Flights
+            "AIRLINE_CODE" AS airline,
+            COUNT(DISTINCT "ORIGIN") AS unique_routes,
+            COUNT(*) AS total_flights
         FROM flights
-        WHERE "DEST" = 'ORD' 
-          AND "AIRLINE_CODE" IS NOT NULL 
-          AND "ORIGIN" IS NOT NULL
-        GROUP BY Airline, Origin, Status
-        ORDER BY Flights DESC
-        LIMIT 100
+        WHERE "DEST" = 'ORD' AND "AIRLINE_CODE" IS NOT NULL
+        GROUP BY airline
+        ORDER BY unique_routes DESC, total_flights DESC
+        LIMIT 10
     """
     
     try:
         df = conn.execute(query).df()
     except Exception:
-        df = pd.DataFrame(columns=['Airline', 'Origin', 'Status', 'Flights'])
+        df = pd.DataFrame(columns=['airline', 'unique_routes', 'total_flights'])
 
     if df.empty:
         fig = go.Figure()
-        fig.add_annotation(
-            text="No connectivity data available",
-            showarrow=False,
-            font=dict(size=14, color="#64748B")
-        )
-        fig.update_layout(
-            height=380,
-            paper_bgcolor="#FFFFFF",
-            xaxis=dict(visible=False),
-            yaxis=dict(visible=False)
-        )
+        fig.add_annotation(text="No data available", showarrow=False)
         return fig
 
-    fig = px.parallel_categories(
+    # Map carrier codes to names
+    df['airline_name'] = df['airline'].apply(lambda x: f"{x} ({AIRLINE_NAMES.get(x, 'Carrier')})")
+
+    fig = px.bar(
         df,
-        dimensions=['Airline', 'Origin', 'Status'],
-        counts='Flights',
-        color_continuous_scale=px.colors.sequential.Blues,
-        labels={'Airline': 'Carrier', 'Origin': 'Origin', 'Status': 'Flight Status'}
+        y='airline_name',
+        x='unique_routes',
+        orientation='h',
+        text='unique_routes',
+        hover_data={'total_flights': ':,', 'unique_routes': True, 'airline_name': False},
+        labels={'unique_routes': 'Direct Connected Hubs', 'airline_name': 'Airline', 'total_flights': 'Total Flights'}
     )
-    
+
+    fig.update_traces(
+        marker_color='#0066CC',
+        textposition='outside',
+        hovertemplate="<b>%{y}</b><br>Connected Origins: %{x}<br>Total Flights: %{customdata[0]:,}<extra></extra>"
+    )
+
+    fig = apply_white_chart_theme(fig)
     fig.update_layout(
-        title=dict(text="⚡ Clean Structured Connectivity (Airline ➔ Origin ➔ Status)", font=dict(size=14, color="#0F172A")),
+        title=dict(text="✈️ Top 10 Airlines by Hub Connectivity (Unique Direct Routes)", font=dict(size=14, color="#0F172A")),
+        yaxis=dict(autorange="reversed", title=""),
+        xaxis=dict(title="Connected Origin Airports"),
         height=380,
-        margin=dict(l=20, r=20, t=40, b=10),
-        paper_bgcolor="#FFFFFF",
-        font=dict(size=11, color='#0F172A', family="sans-serif")
+        margin=dict(l=10, r=30, t=40, b=10)
     )
     return fig
     
@@ -483,7 +482,8 @@ if page == "Arrivals Intelligence":
 
         with st.container(border=True):
             # REPLACED: Option 1 Parallel Categories Chart
-            st.plotly_chart(create_parallel_categories_connectivity(conn), use_container_width=True)
+            st.plotly_chart(create_airline_connectivity_barchart(conn), use_container_width=True)
+            
             # Updated line in app.py
 
     # Simplified Flight Cards Section
