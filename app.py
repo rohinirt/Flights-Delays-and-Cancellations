@@ -13,97 +13,68 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Helper function to safely convert potential NaN/None values to integers
-def safe_int(val, default=0):
-    if pd.isna(val) or val is None:
-        return default
-    return int(val)
-
-# Helper function to format military time strings
-def format_time_str(time_val):
-    if pd.isna(time_val) or time_val is None:
-        return "--:--"
-    time_str = str(int(time_val)).zfill(4)
-    hours = int(time_str[:2])
-    mins = int(time_str[2:])
-    period = "am" if hours < 12 else "pm"
-    display_hour = hours if hours % 12 != 0 else 12
-    if display_hour > 12:
-        display_hour -= 12
-    return f"{display_hour}:{mins:02d} {period}"
-
-# Name Reference Dictionaries
-AIRLINE_NAMES = {
-    'AA': 'American Airlines', 'UA': 'United Airlines', 'DL': 'Delta Air Lines',
-    'WN': 'Southwest Airlines', 'B6': 'JetBlue Airways', 'NK': 'Spirit Airlines',
-    'F9': 'Frontier Airlines', 'AS': 'Alaska Airlines', 'G4': 'Allegiant Air',
-    'OH': 'Piedmont Airlines', 'YX': 'Republic Airways', 'MQ': 'Envoy Air',
-    'OO': 'SkyWest Airlines', '9E': 'Endeavor Air'
-}
-
-AIRPORT_CITY_NAMES = {
-    'LAX': 'Los Angeles', 'JFK': 'New York', 'DFW': 'Dallas/Fort Worth',
-    'DEN': 'Denver', 'ATL': 'Atlanta', 'SFO': 'San Francisco',
-    'SEA': 'Seattle', 'LAS': 'Las Vegas', 'MCO': 'Orlando',
-    'PHX': 'Phoenix', 'EWR': 'Newark', 'CLT': 'Charlotte',
-    'MSP': 'Minneapolis', 'BOS': 'Boston', 'LGA': 'New York (LGA)',
-    'DTW': 'Detroit', 'IAH': 'Houston', 'MIA': 'Miami',
-    'SAN': 'San Diego', 'SLC': 'Salt Lake City'
-}
-
-# Fully updated CSS targeting Streamlit's structural elements
+# Global CSS Overrides for Clean Single Borders & Pure White Backgrounds
 st.markdown("""
 <style>
-    /* 1. Global Page Background */
+    /* 1. Base App Canvas */
     .stApp, [data-testid="stAppViewContainer"] {
         background-color: #F8FAFC !important;
     }
 
-    /* 2. Remove Double Borders: Force inner containers inside columns to be borderless */
-    [data-testid="stColumn"] [data-testid="stVerticalBlockBorderWrapper"] {
+    /* 2. REMOVE INNER DOUBLE BORDERS: Strip borders from containers nested inside columns */
+    div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"],
+    div[data-testid="stColumn"] div[data-testid="stVerticalBlock"] {
         border: none !important;
         box-shadow: none !important;
         background-color: transparent !important;
         padding: 0px !important;
     }
 
-    /* 3. Global Card Styling: Apply a single outer border to main containers */
-    [data-testid="stVerticalBlockBorderWrapper"] {
+    /* 3. SINGLE OUTER CARD BORDER: Only parent container wrappers get an outer border */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #FFFFFF !important;
         border: 1px solid #CBD5E1 !important;
         border-radius: 10px !important;
         box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
         padding: 16px !important;
+        margin-bottom: 16px !important;
     }
 
-    /* 4. KPI Top Cards Styling */
-    [data-testid="stColumn"] > div {
-        background-color: #FFFFFF !important;
-        border: 1px solid #CBD5E1 !important;
-        border-radius: 10px !important;
-        padding: 10px 6px 2px 6px !important;
-    }
-
-    /* 5. Force Pure White Background on Plotly Chart Wrappers */
-    .stPlotlyChart, [data-testid="stPlotlyChart"] {
+    /* 4. FORCE PURE WHITE BACKGROUND ON PLOTLY CHART CONTAINERS */
+    .stPlotlyChart, 
+    [data-testid="stPlotlyChart"],
+    .js-plotly-plot,
+    .plot-container {
         background-color: #FFFFFF !important;
         border-radius: 8px !important;
     }
 
-    /* 6. Force Pure White Background on Inbound Records Table (st.dataframe) */
+    /* 5. FORCE PURE WHITE BACKGROUND ON DATAFRAME & TABLE ELEMENTS */
     [data-testid="stDataFrame"], 
     [data-testid="stDataFrame"] > div,
     [data-testid="stDataFrame"] iframe,
-    .stDataFrame {
-        background-color: #FFFFFF !important;
-    }
-    
-    /* Target Glide-Data-Grid canvas (Streamlit 1.30+ Dataframe renderer) */
     div[data-testid="stDataFrame"] canvas {
         background-color: #FFFFFF !important;
     }
 
-    /* Simplified Readable Flight Cards */
+    /* KPI Top Card Styling */
+    div[data-testid="stColumn"] > div {
+        background-color: #FFFFFF !important;
+        border: 1px solid #CBD5E1 !important;
+        border-radius: 10px !important;
+        padding: 10px 6px 2px 6px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+    }
+
+    /* Segmented Control Styling */
+    div[data-testid="stSegmentedControl"] {
+        background-color: #F1F5F9 !important;
+        border-radius: 8px !important;
+        padding: 3px !important;
+        margin-bottom: 8px !important;
+    }
+
+    /* Clean Flight Item Cards */
     .flight-clean-card {
         background-color: #FFFFFF !important;
         border: 1px solid #E2E8F0 !important;
@@ -145,7 +116,7 @@ st.markdown("""
         color: #10B981;
     }
 
-    /* Sidebar Dark Styling */
+    /* Sidebar Dark Theme Styling */
     section[data-testid="stSidebar"] {
         background-color: #0A192F !important;
     }
@@ -154,6 +125,44 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# Helper function to safely convert potential NaN/None values to integers
+def safe_int(val, default=0):
+    if pd.isna(val) or val is None:
+        return default
+    return int(val)
+
+# Helper function to format military time strings
+def format_time_str(time_val):
+    if pd.isna(time_val) or time_val is None:
+        return "--:--"
+    time_str = str(int(time_val)).zfill(4)
+    hours = int(time_str[:2])
+    mins = int(time_str[2:])
+    period = "am" if hours < 12 else "pm"
+    display_hour = hours if hours % 12 != 0 else 12
+    if display_hour > 12:
+        display_hour -= 12
+    return f"{display_hour}:{mins:02d} {period}"
+
+# Reference Lookups
+AIRLINE_NAMES = {
+    'AA': 'American Airlines', 'UA': 'United Airlines', 'DL': 'Delta Air Lines',
+    'WN': 'Southwest Airlines', 'B6': 'JetBlue Airways', 'NK': 'Spirit Airlines',
+    'F9': 'Frontier Airlines', 'AS': 'Alaska Airlines', 'G4': 'Allegiant Air',
+    'OH': 'Piedmont Airlines', 'YX': 'Republic Airways', 'MQ': 'Envoy Air',
+    'OO': 'SkyWest Airlines', '9E': 'Endeavor Air'
+}
+
+AIRPORT_CITY_NAMES = {
+    'LAX': 'Los Angeles', 'JFK': 'New York', 'DFW': 'Dallas/Fort Worth',
+    'DEN': 'Denver', 'ATL': 'Atlanta', 'SFO': 'San Francisco',
+    'SEA': 'Seattle', 'LAS': 'Las Vegas', 'MCO': 'Orlando',
+    'PHX': 'Phoenix', 'EWR': 'Newark', 'CLT': 'Charlotte',
+    'MSP': 'Minneapolis', 'BOS': 'Boston', 'LGA': 'New York (LGA)',
+    'DTW': 'Detroit', 'IAH': 'Houston', 'MIA': 'Miami',
+    'SAN': 'San Diego', 'SLC': 'Salt Lake City'
+}
 
 @st.cache_resource
 def get_db_connection():
@@ -206,24 +215,24 @@ def load_airport_coordinates():
 def apply_white_chart_theme(fig):
     fig.update_layout(
         template="plotly_white",
-        font=dict(color="#0f172a", family="sans-serif"),
+        font=dict(color="#0F172A", family="sans-serif"),
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#FFFFFF",
-        title=dict(font=dict(color="#0f172a", size=14, weight="bold")),
+        title=dict(font=dict(color="#0F172A", size=14, weight="bold")),
         xaxis=dict(
-            title=dict(font=dict(color="#0f172a")),
-            tickfont=dict(color="#0f172a"),
-            gridcolor="#f1f5f9"
+            title=dict(font=dict(color="#0F172A")),
+            tickfont=dict(color="#0F172A"),
+            gridcolor="#F1F5F9"
         ),
         yaxis=dict(
-            title=dict(font=dict(color="#0f172a")),
-            tickfont=dict(color="#0f172a"),
-            gridcolor="#f1f5f9"
+            title=dict(font=dict(color="#0F172A")),
+            tickfont=dict(color="#0F172A"),
+            gridcolor="#F1F5F9"
         ),
-        legend=dict(font=dict(color="#0f172a")),
+        legend=dict(font=dict(color="#0F172A")),
         coloraxis_colorbar=dict(
-            title=dict(font=dict(color="#0f172a")),
-            tickfont=dict(color="#0f172a")
+            title=dict(font=dict(color="#0F172A")),
+            tickfont=dict(color="#0F172A")
         )
     )
     return fig
@@ -317,7 +326,7 @@ def create_3d_arrivals_map_all(conn, selected_airlines=None):
     ))
 
     fig.update_layout(
-        title=dict(text="🌐 3D Dynamic Arrivals Map", font=dict(size=14, color="#0f172a")),
+        title=dict(text="🌐 3D Dynamic Arrivals Map", font=dict(size=14, color="#0F172A")),
         geo=dict(
             scope='north america',
             projection_type='orthographic',
@@ -535,11 +544,11 @@ if page == "Arrivals Intelligence":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Main Grid Layout
-    col_left, col_right = st.columns([1, 1])
+    # Main Analytics Row Container (Prevents Nested Double Borders)
+    with st.container(border=True):
+        col_left, col_right = st.columns([1, 1])
 
-    with col_left:
-        with st.container(border=True):
+        with col_left:
             measure = st.segmented_control(
                 "",
                 ["Flights Count", "On-Time %", "Cancellations", "Avg Delay (min)"],
@@ -591,18 +600,15 @@ if page == "Arrivals Intelligence":
             fig_orig.update_layout(yaxis=dict(autorange="reversed", title=""), xaxis=dict(title=measure), margin=dict(l=10, r=25, t=35, b=10), height=320)
             st.plotly_chart(fig_orig, use_container_width=True)
 
-    with col_right:
-        with st.container(border=True):
+        with col_right:
             st.plotly_chart(create_3d_arrivals_map_all(conn, selected_airline), use_container_width=True)
-
-        with st.container(border=True):
             st.plotly_chart(create_airline_to_origin_sankey(conn, selected_airline), use_container_width=True)
 
-    # Clean Readable Flight Cards Section
-    col_longest, col_delayed = st.columns(2)
+    # Flight Cards Container
+    with st.container(border=True):
+        col_longest, col_delayed = st.columns(2)
 
-    with col_longest:
-        with st.container(border=True):
+        with col_longest:
             st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 10px;'>✈️ Top 5 Longest Inbound Routes</div>", unsafe_allow_html=True)
             longest_df = conn.execute(f"""
                 SELECT 
@@ -619,8 +625,7 @@ if page == "Arrivals Intelligence":
             for idx, row in longest_df.iterrows():
                 render_flight_card_clean(row, is_delayed=False)
 
-    with col_delayed:
-        with st.container(border=True):
+        with col_delayed:
             st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 10px;'>⚠️ Top 5 Most Delayed Inbound Flights</div>", unsafe_allow_html=True)
             delayed_df = conn.execute(f"""
                 SELECT 
@@ -637,11 +642,11 @@ if page == "Arrivals Intelligence":
             for idx, row in delayed_df.iterrows():
                 render_flight_card_clean(row, is_delayed=True)
 
-    # Temporal Heatmap & Vertical Delay Bar Drivers
-    c_heat, c_delay = st.columns([1.3, 1])
+    # Temporal Heatmap & Vertical Delay Drivers Container
+    with st.container(border=True):
+        c_heat, c_delay = st.columns([1.3, 1])
 
-    with c_heat:
-        with st.container(border=True):
+        with c_heat:
             st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>Arrival Volume Heatmap</div>", unsafe_allow_html=True)
             heat_dim = st.segmented_control("", ["Month vs. Hour", "Day of Week vs. Hour"], default="Month vs. Hour", label_visibility="collapsed")
             
@@ -688,8 +693,7 @@ if page == "Arrivals Intelligence":
             )
             st.plotly_chart(fig_heat, use_container_width=True)
 
-    with c_delay:
-        with st.container(border=True):
+        with c_delay:
             st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>Arrival Delay Drivers</div>", unsafe_allow_html=True)
             delay_df = conn.execute(f"""
                 SELECT 
@@ -722,7 +726,7 @@ if page == "Arrivals Intelligence":
             )
             st.plotly_chart(fig_delay_bar, use_container_width=True)
 
-    # Pure White Dataframe Table Section
+    # Pure White Dataframe Records Table Container
     with st.container(border=True):
         st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 10px;'>📋 Inbound Flight Records Table</div>", unsafe_allow_html=True)
         table_df = conn.execute(f"""
