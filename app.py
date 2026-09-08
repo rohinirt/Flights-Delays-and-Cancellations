@@ -268,34 +268,20 @@ def create_3d_arrivals_map_all(conn, map_airline_filter=None):
     return fig
 
 def create_parallel_categories_connectivity(conn, *args, **kwargs):
-    # Static clean query showing overall connectivity for top carriers and origins
+    # Direct aggregation without subquery JOINs to guarantee records render
     query = """
-        WITH top_origins AS (
-            SELECT "ORIGIN"
-            FROM flights
-            WHERE "DEST" = 'ORD'
-            GROUP BY "ORIGIN"
-            ORDER BY COUNT(*) DESC
-            LIMIT 8
-        ),
-        top_airlines AS (
-            SELECT "AIRLINE_CODE"
-            FROM flights
-            WHERE "DEST" = 'ORD'
-            GROUP BY "AIRLINE_CODE"
-            ORDER BY COUNT(*) DESC
-            LIMIT 5
-        )
         SELECT 
-            f."AIRLINE_CODE" AS Airline,
-            f."ORIGIN" AS Origin,
-            CASE WHEN f."ARR_DELAY" <= 15 THEN 'On-Time' ELSE 'Delayed' END AS Status,
+            "AIRLINE_CODE" AS Airline,
+            "ORIGIN" AS Origin,
+            CASE WHEN "ARR_DELAY" <= 15 THEN 'On-Time' ELSE 'Delayed' END AS Status,
             COUNT(*) AS Flights
-        FROM flights f
-        JOIN top_origins o ON f."ORIGIN" = o."ORIGIN"
-        JOIN top_airlines a ON f."AIRLINE_CODE" = a."AIRLINE_CODE"
-        WHERE f."DEST" = 'ORD'
+        FROM flights
+        WHERE "DEST" = 'ORD' 
+          AND "AIRLINE_CODE" IS NOT NULL 
+          AND "ORIGIN" IS NOT NULL
         GROUP BY Airline, Origin, Status
+        ORDER BY Flights DESC
+        LIMIT 100
     """
     
     try:
@@ -323,7 +309,7 @@ def create_parallel_categories_connectivity(conn, *args, **kwargs):
         dimensions=['Airline', 'Origin', 'Status'],
         counts='Flights',
         color_continuous_scale=px.colors.sequential.Blues,
-        labels={'Airline': 'Carrier', 'Origin': 'Top Origin', 'Status': 'Flight Status'}
+        labels={'Airline': 'Carrier', 'Origin': 'Origin', 'Status': 'Flight Status'}
     )
     
     fig.update_layout(
