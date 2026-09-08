@@ -267,16 +267,10 @@ def create_3d_arrivals_map_all(conn, map_airline_filter=None):
     )
     return fig
 
-def create_parallel_categories_connectivity(conn, selected_airlines=None):
-    # CTE approach isolates parameter filtering cleanly to prevent DuckDB parser errors
+def create_parallel_categories_connectivity(conn, *args, **kwargs):
+    # Static clean query showing overall connectivity for top carriers and origins
     query = """
-        WITH filtered_flights AS (
-            SELECT "AIRLINE_CODE", "ORIGIN", "ARR_DELAY"
-            FROM flights
-            WHERE "DEST" = 'ORD'
-            {airline_filter}
-        ),
-        top_origins AS (
+        WITH top_origins AS (
             SELECT "ORIGIN"
             FROM flights
             WHERE "DEST" = 'ORD'
@@ -297,32 +291,22 @@ def create_parallel_categories_connectivity(conn, selected_airlines=None):
             f."ORIGIN" AS Origin,
             CASE WHEN f."ARR_DELAY" <= 15 THEN 'On-Time' ELSE 'Delayed' END AS Status,
             COUNT(*) AS Flights
-        FROM filtered_flights f
+        FROM flights f
         JOIN top_origins o ON f."ORIGIN" = o."ORIGIN"
         JOIN top_airlines a ON f."AIRLINE_CODE" = a."AIRLINE_CODE"
+        WHERE f."DEST" = 'ORD'
         GROUP BY Airline, Origin, Status
     """
-
-    params = []
-    airline_filter_sql = ""
-    
-    if selected_airlines:
-        placeholders = ", ".join(["?"] * len(selected_airlines))
-        airline_filter_sql = f"AND \"AIRLINE_CODE\" IN ({placeholders})"
-        params.extend(selected_airlines)
-
-    formatted_query = query.format(airline_filter_sql=airline_filter_sql)
     
     try:
-        df = conn.execute(formatted_query, params).df()
-    except Exception as e:
-        # Fallback empty dataframe on unexpected query execution failure
+        df = conn.execute(query).df()
+    except Exception:
         df = pd.DataFrame(columns=['Airline', 'Origin', 'Status', 'Flights'])
 
     if df.empty:
         fig = go.Figure()
         fig.add_annotation(
-            text="No matching connectivity data found",
+            text="No connectivity data available",
             showarrow=False,
             font=dict(size=14, color="#64748B")
         )
@@ -513,7 +497,8 @@ if page == "Arrivals Intelligence":
 
         with st.container(border=True):
             # REPLACED: Option 1 Parallel Categories Chart
-            st.plotly_chart(create_parallel_categories_connectivity(conn, selected_airline), use_container_width=True)
+            st.plotly_chart(create_parallel_categories_connectivity(conn), use_container_width=True)
+            # Updated line in app.py
 
     # Simplified Flight Cards Section
     col_longest, col_delayed = st.columns(2)
