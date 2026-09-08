@@ -267,7 +267,7 @@ def create_3d_arrivals_map_all(conn, map_airline_filter=None):
     )
     return fig
 
-def create_top5_sankey(conn, selected_airlines=None):
+def create_parallel_categories_connectivity(conn, selected_airlines=None):
     where_clause = "WHERE \"DEST\" = 'ORD'"
     params = []
     if selected_airlines:
@@ -275,54 +275,42 @@ def create_top5_sankey(conn, selected_airlines=None):
         where_clause += f" AND \"AIRLINE_CODE\" IN ({placeholders})"
         params.extend(selected_airlines)
 
-    # Filter to Top 5 Airlines strictly by flight count
-    top5_airlines = conn.execute(f"""
-        SELECT "AIRLINE_CODE" FROM flights {where_clause}
-        GROUP BY "AIRLINE_CODE" ORDER BY COUNT(*) DESC LIMIT 5
-    """, params).df()['AIRLINE_CODE'].tolist()
+    # Clean Parallel Flow (Carrier -> Top Origins -> On-Time Performance Category)
+    df = conn.execute(f"""
+        SELECT 
+            "AIRLINE_CODE" AS Airline,
+            "ORIGIN" AS Origin,
+            CASE WHEN "ARR_DELAY" <= 15 THEN 'On-Time' ELSE 'Delayed' END AS Status,
+            COUNT(*) AS Flights
+        FROM flights {where_clause}
+        WHERE "ORIGIN" IN (
+            SELECT "ORIGIN" FROM flights WHERE "DEST"='ORD' GROUP BY "ORIGIN" ORDER BY COUNT(*) DESC LIMIT 8
+        )
+        AND "AIRLINE_CODE" IN (
+            SELECT "AIRLINE_CODE" FROM flights WHERE "DEST"='ORD' GROUP BY "AIRLINE_CODE" ORDER BY COUNT(*) DESC LIMIT 5
+        )
+        GROUP BY Airline, Origin, Status
+    """, params).df()
 
-    if not top5_airlines:
+    if df.empty:
         fig = go.Figure()
-        fig.add_annotation(text="No data available", showarrow=False)
+        fig.add_annotation(text="No data available for Parallel flow", showarrow=False)
         return fig
 
-    sankey_where = where_clause + " AND \"AIRLINE_CODE\" IN (" + ", ".join(["?"] * len(top5_airlines)) + ")"
-    sankey_params = params + top5_airlines
-
-    sankey_data = conn.execute(f"""
-        SELECT "AIRLINE_CODE", "ORIGIN", COUNT(*) AS flight_count
-        FROM flights {sankey_where}
-        GROUP BY "AIRLINE_CODE", "ORIGIN" ORDER BY flight_count DESC
-    """, sankey_params).df()
-
-    airlines_list = top5_airlines
-    origins_list = list(sankey_data['ORIGIN'].unique())
-    all_nodes = airlines_list + origins_list
+    fig = px.parallel_categories(
+        df,
+        dimensions=['Airline', 'Origin', 'Status'],
+        counts='Flights',
+        color_continuous_scale=px.colors.sequential.Blues,
+        labels={'Airline': 'Carrier', 'Origin': 'Top Origin', 'Status': 'Flight Status'}
+    )
     
-    node_dict = {node: i for i, node in enumerate(all_nodes)}
-
-    sources, targets, values = [], [], []
-
-    for _, row in sankey_data.iterrows():
-        sources.append(node_dict[row['AIRLINE_CODE']])
-        targets.append(node_dict[row['ORIGIN']])
-        values.append(int(row['flight_count']))
-
-    node_colors = ['#0066CC'] * len(airlines_list) + ['#0A192F'] * len(origins_list)
-
-    fig = go.Figure(data=[go.Sankey(
-        arrangement="snap",
-        node=dict(pad=10, thickness=14, line=dict(color="#CBD5E1", width=1), label=all_nodes, color=node_colors),
-        link=dict(source=sources, target=targets, value=values, color='rgba(0, 102, 204, 0.2)')
-    )])
-
     fig.update_layout(
-        title=dict(text="🔀 Top 5 Airlines Connectivity Flow", font=dict(size=14, color="#0F172A")),
-        font=dict(size=10, color='#0F172A', family="sans-serif"),
+        title=dict(text="⚡ Clean Structured Connectivity (Airline ➔ Origin ➔ Status)", font=dict(size=14, color="#0F172A")),
         height=380,
-        margin=dict(l=10, r=10, t=35, b=10),
+        margin=dict(l=20, r=20, t=40, b=10),
         paper_bgcolor="#FFFFFF",
-        plot_bgcolor="#FFFFFF"
+        font=dict(size=11, color='#0F172A', family="sans-serif")
     )
     return fig
 
@@ -445,7 +433,7 @@ if page == "Arrivals Intelligence":
             }
             sql_val, sql_ord = measure_map[measure]
 
-            # 1. TOP 10 ORIGINS (Swapped Position)
+            # Top 10 Origins
             origins_df = conn.execute(f"""
                 SELECT "ORIGIN" AS code, {sql_val} AS val
                 FROM flights {where_clause}
@@ -463,7 +451,7 @@ if page == "Arrivals Intelligence":
             fig_orig.update_layout(yaxis=dict(autorange="reversed", title=""), xaxis=dict(title=measure), margin=dict(l=10, r=25, t=35, b=10), height=320)
             st.plotly_chart(fig_orig, use_container_width=True)
 
-            # 2. TOP 10 AIRLINES (Swapped Position)
+            # Top 10 Airlines
             airlines_df = conn.execute(f"""
                 SELECT "AIRLINE_CODE" AS code, {sql_val} AS val
                 FROM flights {where_clause}
@@ -483,12 +471,12 @@ if page == "Arrivals Intelligence":
 
     with col_right:
         with st.container(border=True):
-            # Map-Specific Airline Filter
             map_airline = st.selectbox("Filter Map by Airline:", ["All Airlines"] + airlines)
             st.plotly_chart(create_3d_arrivals_map_all(conn, map_airline), use_container_width=True)
 
         with st.container(border=True):
-            st.plotly_chart(create_top5_sankey(conn, selected_airline), use_container_width=True)
+            # REPLACED: Option 1 Parallel Categories Chart
+            st.plotly_chart(create_parallel_categories_connectivity(conn, selected_airline), use_container_width=True)
 
     # Simplified Flight Cards Section
     col_longest, col_delayed = st.columns(2)
@@ -583,7 +571,7 @@ if page == "Arrivals Intelligence":
         """, params).df()
         st.dataframe(table_df, use_container_width=True, height=260)
 
-    # NEW: Origin Hub Stress Test (Quadrant Chart - Without Labels)
+    # Origin Hub Stress Test (Quadrant Chart - Without Labels)
     with st.container(border=True):
         st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>🎯 Origin Hub Stress Test (Volume vs Avg Delay)</div>", unsafe_allow_html=True)
         quad_df = conn.execute(f"""
@@ -602,7 +590,6 @@ if page == "Arrivals Intelligence":
         fig_quad.update_traces(marker=dict(size=9, color='#0066CC', opacity=0.75))
         fig_quad = apply_white_chart_theme(fig_quad)
         
-        # Add Quadrant Division Baseline Lines
         fig_quad.add_hline(y=avg_del, line_dash="dash", line_color="#94A3B8")
         fig_quad.add_vline(x=avg_vol, line_dash="dash", line_color="#94A3B8")
 
