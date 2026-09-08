@@ -48,17 +48,28 @@ AIRPORT_CITY_NAMES = {
     'SAN': 'San Diego', 'SLC': 'Salt Lake City'
 }
 
+# Compact Dashboard Custom CSS (Strips out extra padding on Top, Bottom, Left & Right)
 st.markdown("""
 <style>
+    /* Remove default Streamlit whitespace/padding */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+        padding-left: 1.5rem !important;
+        padding-right: 1.5rem !important;
+        max-width: 100% !important;
+    }
+
     .stApp { background-color: #F8FAFC !important; }
-    
+
+    /* Compact container styling */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #FFFFFF !important;
-        border-radius: 10px !important;
+        border-radius: 8px !important;
         border: 1px solid #CBD5E1 !important;
-        padding: 16px !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
-        margin-bottom: 12px !important;
+        padding: 8px 12px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03) !important;
+        margin-bottom: 6px !important;
     }
 
     div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] {
@@ -70,40 +81,40 @@ st.markdown("""
     div[data-testid="stColumn"] > div {
         background-color: #FFFFFF !important;
         border: 1px solid #CBD5E1 !important;
-        border-radius: 10px !important;
-        padding: 10px 6px 2px 6px !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+        border-radius: 8px !important;
+        padding: 6px 4px 2px 4px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03) !important;
     }
 
     div[data-testid="stSegmentedControl"] {
         background-color: #F1F5F9 !important;
-        border-radius: 8px !important;
-        padding: 3px !important;
-        margin-bottom: 8px !important;
+        border-radius: 6px !important;
+        padding: 2px !important;
+        margin-bottom: 4px !important;
     }
 
     div[data-testid="stDataFrame"], 
     div[data-testid="stDataFrame"] > div,
     div[data-testid="stDataFrame"] iframe {
         background-color: #FFFFFF !important;
-        border-radius: 8px !important;
+        border-radius: 6px !important;
     }
 
     .flight-clean-card {
         background-color: #FFFFFF;
         border: 1px solid #E2E8F0;
-        border-radius: 8px;
-        padding: 8px 12px;
-        margin-bottom: 8px;
+        border-radius: 6px;
+        padding: 6px 10px;
+        margin-bottom: 6px;
         display: flex;
         justify-content: space-between;
         align-items: center;
     }
     .flight-clean-card.delayed { border-left: 4px solid #D00000; }
     .flight-clean-card.normal { border-left: 4px solid #0066CC; }
-    .flight-code-title { font-size: 0.88rem; font-weight: 700; color: #0F172A; }
-    .flight-sub-info { font-size: 0.75rem; color: #64748B; }
-    .flight-badge-status { font-size: 0.78rem; font-weight: 700; padding: 3px 8px; border-radius: 4px; text-align: right; }
+    .flight-code-title { font-size: 0.85rem; font-weight: 700; color: #0F172A; }
+    .flight-sub-info { font-size: 0.72rem; color: #64748B; }
+    .flight-badge-status { font-size: 0.75rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-align: right; }
     .badge-delay { background-color: #FEF2F2; color: #D00000; }
     .badge-normal { background-color: #F0FDF4; color: #10B981; }
 
@@ -293,7 +304,7 @@ def create_airline_connectivity_barchart(conn):
 
     if df.empty:
         fig = go.Figure()
-        fig.add_annotation(text="No data available - Check Dataset Columns", showarrow=False)
+        fig.add_annotation(text="No connectivity data available", showarrow=False)
         return fig
 
     df['airline_name'] = df['airline'].apply(lambda x: f"{x} ({AIRLINE_NAMES.get(str(x), 'Carrier')})")
@@ -323,30 +334,44 @@ def create_airline_connectivity_barchart(conn):
     )
     return fig
 
-def create_airline_radar_chart(conn):
+def create_airline_radar_chart(conn, where_clause="WHERE \"DEST\" = 'ORD'", params=None):
     """Radar Chart benchmarking top airlines across 4 core operational metrics."""
-    query = """
-        SELECT 
-            "AIRLINE_CODE" AS airline,
-            COUNT(*) AS total_flights,
-            ROUND(AVG(CASE WHEN "ARR_DELAY" <= 15 THEN 1.0 ELSE 0.0 END) * 100, 2) AS on_time_pct,
-            ROUND(AVG(CASE WHEN "ARR_DELAY" > 0 THEN "ARR_DELAY" ELSE 0 END), 2) AS avg_delay,
-            ROUND(AVG(CASE WHEN "CANCELLED" = 1 THEN 1.0 ELSE 0.0 END) * 100, 2) AS cancellation_rate
-        FROM flights
-        WHERE "DEST" = 'ORD' AND "AIRLINE_CODE" IS NOT NULL
-        GROUP BY airline
-        HAVING COUNT(*) > 50
-        ORDER BY total_flights DESC
-        LIMIT 6
-    """
+    if params is None:
+        params = []
+        
     try:
-        df = conn.execute(query).df()
+        # Detect exact column name dynamically
+        cols_df = conn.execute("DESCRIBE flights").df()
+        cols = cols_df['column_name'].tolist()
+        
+        airline_col = '"AIRLINE_CODE"' if 'AIRLINE_CODE' in cols else ('"AIRLINE"' if 'AIRLINE' in cols else ('"OP_UNIQUE_CARRIER"' if 'OP_UNIQUE_CARRIER' in cols else None))
+        
+        if not airline_col:
+            fig = go.Figure()
+            fig.add_annotation(text="Airline column not found in database", showarrow=False)
+            return fig
+
+        query = f"""
+            SELECT 
+                {airline_col} AS airline,
+                COUNT(*) AS total_flights,
+                ROUND(AVG(CASE WHEN "ARR_DELAY" <= 15 THEN 1.0 ELSE 0.0 END) * 100, 2) AS on_time_pct,
+                ROUND(AVG(CASE WHEN "ARR_DELAY" > 0 THEN "ARR_DELAY" ELSE 0.0 END), 2) AS avg_delay,
+                ROUND(AVG(CASE WHEN "CANCELLED" = 1 THEN 1.0 ELSE 0.0 END) * 100, 2) AS cancellation_rate
+            FROM flights
+            {where_clause} AND {airline_col} IS NOT NULL
+            GROUP BY airline
+            HAVING COUNT(*) > 5
+            ORDER BY total_flights DESC
+            LIMIT 6
+        """
+        df = conn.execute(query, params).df()
     except Exception:
         df = pd.DataFrame()
 
     if df.empty:
         fig = go.Figure()
-        fig.add_annotation(text="No airline performance data available", showarrow=False)
+        fig.add_annotation(text="No airline performance data available for current selection", showarrow=False)
         return fig
 
     categories = ['Flights (Scaled)', 'Cancellation Rate (%)', 'Avg Delay (mins)', 'On-Time %']
@@ -384,7 +409,7 @@ def create_airline_radar_chart(conn):
             hoverinfo='text',
             text=hover_text,
             line=dict(color=colors[idx % len(colors)], width=2),
-            opacity=0.5
+            opacity=0.4
         ))
 
     fig.update_layout(
@@ -394,9 +419,9 @@ def create_airline_radar_chart(conn):
             angularaxis=dict(color="#0F172A")
         ),
         showlegend=True,
-        legend=dict(orientation="h", yanchor="bottom", y=-0.35, xanchor="center", x=0.5),
-        height=420,
-        margin=dict(l=40, r=40, t=50, b=80),
+        legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5),
+        height=360,
+        margin=dict(l=30, r=30, t=40, b=40),
         paper_bgcolor="#FFFFFF"
     )
     return fig
@@ -438,7 +463,16 @@ page = st.sidebar.radio("Navigation", ["Arrivals Intelligence", "Departures Inte
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Filter Data")
-airlines = conn.execute('SELECT DISTINCT "AIRLINE_CODE" FROM flights WHERE "AIRLINE_CODE" IS NOT NULL').df().iloc[:, 0].dropna().tolist()
+
+# Get airlines list safely
+try:
+    cols_df = conn.execute("DESCRIBE flights").df()
+    cols = cols_df['column_name'].tolist()
+    airline_col_name = 'AIRLINE_CODE' if 'AIRLINE_CODE' in cols else ('AIRLINE' if 'AIRLINE' in cols else 'OP_UNIQUE_CARRIER')
+    airlines = conn.execute(f'SELECT DISTINCT "{airline_col_name}" FROM flights WHERE "{airline_col_name}" IS NOT NULL').df().iloc[:, 0].dropna().tolist()
+except Exception:
+    airlines = []
+
 selected_airline = st.sidebar.multiselect("Select Airline", options=airlines, default=[])
 
 where_clause = "WHERE \"DEST\" = 'ORD'"
@@ -452,7 +486,6 @@ if selected_airline:
 if page == "Arrivals Intelligence":
     st.title("🛬 ORD Arrivals Intelligence")
     st.caption("2022 Operational Performance & Route Analytics")
-    st.markdown("<br>", unsafe_allow_html=True)
     
     kpi_query = f"""
         SELECT 
@@ -498,8 +531,6 @@ if page == "Arrivals Intelligence":
     with c5:
         st.markdown(f"<div style='text-align: center;'><div style='font-size: 0.72rem; font-weight: 700; color: #475569;'>DIVERTED</div><div style='font-size: 1.3rem; font-weight: 800; color: #0A192F;'>{safe_int(total_diverted):,}</div></div>", unsafe_allow_html=True)
         st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'diverted', '#38BDF8'), use_container_width=True, config={'displayModeBar': False})
-
-    st.markdown("<br>", unsafe_allow_html=True)
 
     col_left, col_right = st.columns([1, 1])
 
@@ -568,7 +599,7 @@ if page == "Arrivals Intelligence":
 
     with col_longest:
         with st.container(border=True):
-            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 10px;'>✈️ Top 5 Longest Inbound Routes</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>✈️ Top 5 Longest Inbound Routes</div>", unsafe_allow_html=True)
             longest_df = conn.execute(f"""
                 SELECT "FL_NUMBER", "AIRLINE_CODE", "ORIGIN", "FL_DATE",
                     COALESCE("CRS_DEP_TIME", 0) AS crs_dep, COALESCE("ARR_TIME", 0) AS actual_arr,
@@ -581,7 +612,7 @@ if page == "Arrivals Intelligence":
 
     with col_delayed:
         with st.container(border=True):
-            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 10px;'>⚠️ Top 5 Most Delayed Inbound Flights</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>⚠️ Top 5 Most Delayed Inbound Flights</div>", unsafe_allow_html=True)
             delayed_df = conn.execute(f"""
                 SELECT "FL_NUMBER", "AIRLINE_CODE", "ORIGIN", "FL_DATE",
                     COALESCE("CRS_DEP_TIME", 0) AS crs_dep, COALESCE("ARR_TIME", 0) AS actual_arr,
@@ -597,7 +628,7 @@ if page == "Arrivals Intelligence":
 
     with c_heat:
         with st.container(border=True):
-            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>Arrival Volume Heatmap</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 6px;'>Arrival Volume Heatmap</div>", unsafe_allow_html=True)
             heat_dim = st.segmented_control("", ["Month vs. Hour", "Day of Week vs. Hour"], default="Month vs. Hour", label_visibility="collapsed")
             
             if heat_dim == "Month vs. Hour":
@@ -629,7 +660,7 @@ if page == "Arrivals Intelligence":
 
     with c_delay:
         with st.container(border=True):
-            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>Arrival Delay Drivers</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 6px;'>Arrival Delay Drivers</div>", unsafe_allow_html=True)
             delay_df = conn.execute(f"""
                 SELECT AVG("DELAY_DUE_CARRIER") AS Carrier, AVG("DELAY_DUE_WEATHER") AS Weather,
                     AVG("DELAY_DUE_NAS") AS NAS, AVG("DELAY_DUE_SECURITY") AS Security,
@@ -649,16 +680,16 @@ if page == "Arrivals Intelligence":
 
     # Flight Records Table Section
     with st.container(border=True):
-        st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 10px;'>📋 Inbound Flight Records Table</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>📋 Inbound Flight Records Table</div>", unsafe_allow_html=True)
         table_df = conn.execute(f"""
             SELECT "FL_DATE", "AIRLINE_CODE", "FL_NUMBER", "ORIGIN", "ARR_DELAY", "CANCELLED", "DISTANCE"
             FROM flights {where_clause} ORDER BY "FL_DATE" DESC LIMIT 100
         """, params).df()
-        st.dataframe(table_df, use_container_width=True, height=260)
+        st.dataframe(table_df, use_container_width=True, height=240)
 
-    # Replaced Section: Airline Multi-Metric Radar Chart
+    # Fixed Airline Radar Chart Section
     with st.container(border=True):
-        st.plotly_chart(create_airline_radar_chart(conn), use_container_width=True)
+        st.plotly_chart(create_airline_radar_chart(conn, where_clause, params), use_container_width=True)
 
 # ==================== OTHER PAGES ====================
 elif page == "Departures Intelligence":
