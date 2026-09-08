@@ -270,31 +270,35 @@ def create_3d_arrivals_map_all(conn, map_airline_filter=None):
 def create_parallel_categories_connectivity(conn, selected_airlines=None):
     where_clause = "WHERE \"DEST\" = 'ORD'"
     params = []
+    
     if selected_airlines:
         placeholders = ", ".join(["?"] * len(selected_airlines))
         where_clause += f" AND \"AIRLINE_CODE\" IN ({placeholders})"
         params.extend(selected_airlines)
 
-    # Clean Parallel Flow (Carrier -> Top Origins -> On-Time Performance Category)
-    df = conn.execute(f"""
+    # Safe SQL query execution avoiding positional parameter mismatches
+    query = f"""
         SELECT 
             "AIRLINE_CODE" AS Airline,
             "ORIGIN" AS Origin,
             CASE WHEN "ARR_DELAY" <= 15 THEN 'On-Time' ELSE 'Delayed' END AS Status,
             COUNT(*) AS Flights
         FROM flights {where_clause}
-        WHERE "ORIGIN" IN (
+        AND "ORIGIN" IN (
             SELECT "ORIGIN" FROM flights WHERE "DEST"='ORD' GROUP BY "ORIGIN" ORDER BY COUNT(*) DESC LIMIT 8
         )
         AND "AIRLINE_CODE" IN (
             SELECT "AIRLINE_CODE" FROM flights WHERE "DEST"='ORD' GROUP BY "AIRLINE_CODE" ORDER BY COUNT(*) DESC LIMIT 5
         )
         GROUP BY Airline, Origin, Status
-    """, params).df()
+    """
+    
+    df = conn.execute(query, params).df()
 
     if df.empty:
         fig = go.Figure()
-        fig.add_annotation(text="No data available for Parallel flow", showarrow=False)
+        fig.add_annotation(text="No connectivity data available for selection", showarrow=False)
+        fig.update_layout(height=380, paper_bgcolor="#FFFFFF")
         return fig
 
     fig = px.parallel_categories(
@@ -313,7 +317,7 @@ def create_parallel_categories_connectivity(conn, selected_airlines=None):
         font=dict(size=11, color='#0F172A', family="sans-serif")
     )
     return fig
-
+    
 def render_flight_card_clean(row, is_delayed=False):
     origin_code = row['ORIGIN']
     airline_code = row['AIRLINE_CODE']
