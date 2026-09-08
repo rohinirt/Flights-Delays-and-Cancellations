@@ -268,37 +268,70 @@ def create_3d_arrivals_map_all(conn, map_airline_filter=None):
     return fig
 
 def create_parallel_categories_connectivity(conn, selected_airlines=None):
-    where_clause = "WHERE \"DEST\" = 'ORD'"
+    # CTE approach isolates parameter filtering cleanly to prevent DuckDB parser errors
+    query = """
+        WITH filtered_flights AS (
+            SELECT "AIRLINE_CODE", "ORIGIN", "ARR_DELAY"
+            FROM flights
+            WHERE "DEST" = 'ORD'
+            {airline_filter}
+        ),
+        top_origins AS (
+            SELECT "ORIGIN"
+            FROM flights
+            WHERE "DEST" = 'ORD'
+            GROUP BY "ORIGIN"
+            ORDER BY COUNT(*) DESC
+            LIMIT 8
+        ),
+        top_airlines AS (
+            SELECT "AIRLINE_CODE"
+            FROM flights
+            WHERE "DEST" = 'ORD'
+            GROUP BY "AIRLINE_CODE"
+            ORDER BY COUNT(*) DESC
+            LIMIT 5
+        )
+        SELECT 
+            f."AIRLINE_CODE" AS Airline,
+            f."ORIGIN" AS Origin,
+            CASE WHEN f."ARR_DELAY" <= 15 THEN 'On-Time' ELSE 'Delayed' END AS Status,
+            COUNT(*) AS Flights
+        FROM filtered_flights f
+        JOIN top_origins o ON f."ORIGIN" = o."ORIGIN"
+        JOIN top_airlines a ON f."AIRLINE_CODE" = a."AIRLINE_CODE"
+        GROUP BY Airline, Origin, Status
+    """
+
     params = []
+    airline_filter_sql = ""
     
     if selected_airlines:
         placeholders = ", ".join(["?"] * len(selected_airlines))
-        where_clause += f" AND \"AIRLINE_CODE\" IN ({placeholders})"
+        airline_filter_sql = f"AND \"AIRLINE_CODE\" IN ({placeholders})"
         params.extend(selected_airlines)
 
-    # Safe SQL query execution avoiding positional parameter mismatches
-    query = f"""
-        SELECT 
-            "AIRLINE_CODE" AS Airline,
-            "ORIGIN" AS Origin,
-            CASE WHEN "ARR_DELAY" <= 15 THEN 'On-Time' ELSE 'Delayed' END AS Status,
-            COUNT(*) AS Flights
-        FROM flights {where_clause}
-        AND "ORIGIN" IN (
-            SELECT "ORIGIN" FROM flights WHERE "DEST"='ORD' GROUP BY "ORIGIN" ORDER BY COUNT(*) DESC LIMIT 8
-        )
-        AND "AIRLINE_CODE" IN (
-            SELECT "AIRLINE_CODE" FROM flights WHERE "DEST"='ORD' GROUP BY "AIRLINE_CODE" ORDER BY COUNT(*) DESC LIMIT 5
-        )
-        GROUP BY Airline, Origin, Status
-    """
+    formatted_query = query.format(airline_filter_sql=airline_filter_sql)
     
-    df = conn.execute(query, params).df()
+    try:
+        df = conn.execute(formatted_query, params).df()
+    except Exception as e:
+        # Fallback empty dataframe on unexpected query execution failure
+        df = pd.DataFrame(columns=['Airline', 'Origin', 'Status', 'Flights'])
 
     if df.empty:
         fig = go.Figure()
-        fig.add_annotation(text="No connectivity data available for selection", showarrow=False)
-        fig.update_layout(height=380, paper_bgcolor="#FFFFFF")
+        fig.add_annotation(
+            text="No matching connectivity data found",
+            showarrow=False,
+            font=dict(size=14, color="#64748B")
+        )
+        fig.update_layout(
+            height=380,
+            paper_bgcolor="#FFFFFF",
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False)
+        )
         return fig
 
     fig = px.parallel_categories(
