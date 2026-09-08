@@ -332,8 +332,6 @@ def create_airline_connectivity_barchart(conn):
     )
     return fig
 
-from plotly.subplots import make_subplots
-
 def create_airline_radar_chart(conn, selected_airline_code=None):
     """Single radar chart dedicated to one filtered airline."""
     try:
@@ -358,7 +356,7 @@ def create_airline_radar_chart(conn, selected_airline_code=None):
 
         df_filtered = df_filtered.dropna(subset=[airline_col])
 
-        # Default to the largest carrier if none specified
+        # Default to top carrier if none specified
         if not selected_airline_code:
             top_carrier = df_filtered[airline_col].value_counts().index[0]
             selected_airline_code = top_carrier
@@ -370,7 +368,7 @@ def create_airline_radar_chart(conn, selected_airline_code=None):
             fig.add_annotation(text=f"No flight data for {selected_airline_code}", showarrow=False)
             return fig
 
-        # Global max flights across the dataset for relative scaling
+        # Scale relative to max flights in the dataset
         global_max_flights = df_raw.groupby(airline_col).size().max() or 1
 
         arr_delay = df_filtered['ARR_DELAY'] if 'ARR_DELAY' in df_filtered.columns else pd.Series(0, index=df_filtered.index)
@@ -469,7 +467,7 @@ try:
     cols_df = conn.execute("DESCRIBE flights").df()
     cols = [c.upper() for c in cols_df['column_name'].tolist()]
     airline_col_name = 'AIRLINE_CODE' if 'AIRLINE_CODE' in cols else ('AIRLINE' if 'AIRLINE' in cols else 'OP_UNIQUE_CARRIER')
-    airlines = conn.execute(f'SELECT DISTINCT "{airline_col_name}" FROM flights WHERE "{airline_col_name}" IS NOT NULL').df().iloc[:, 0].dropna().tolist()
+    airlines = conn.execute(f'SELECT DISTINCT "{airline_col_name}" FROM flights WHERE "{airline_col_name}" IS NOT NULL ORDER BY 1').df().iloc[:, 0].dropna().tolist()
 except Exception:
     airlines = []
 
@@ -678,18 +676,34 @@ if page == "Arrivals Intelligence":
             fig_delay_bar.update_layout(height=280, margin=dict(l=10, r=10, t=35, b=10), xaxis=dict(title=""), yaxis=dict(title="Minutes"))
             st.plotly_chart(fig_delay_bar, use_container_width=True)
 
-    # Flight Records Table Section
-    with st.container(border=True):
-        st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>📋 Inbound Flight Records Table</div>", unsafe_allow_html=True)
-        table_df = conn.execute(f"""
-            SELECT "FL_DATE", "{airline_col_name}" AS AIRLINE, "FL_NUMBER", "ORIGIN", "ARR_DELAY", "CANCELLED", "DISTANCE"
-            FROM flights {where_clause} ORDER BY "FL_DATE" DESC LIMIT 100
-        """, params).df()
-        st.dataframe(table_df, use_container_width=True, height=240)
+    # Combined Table (Left) and Radar Chart with Filter (Right) Section
+    col_table, col_radar = st.columns([1.3, 1])
 
-    # Radar Chart Render
-    with st.container(border=True):
-        st.plotly_chart(create_airline_radar_chart(conn, selected_airline), use_container_width=True)
+    with col_table:
+        with st.container(border=True):
+            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>📋 Inbound Flight Records Table</div>", unsafe_allow_html=True)
+            table_df = conn.execute(f"""
+                SELECT "FL_DATE", "{airline_col_name}" AS AIRLINE, "FL_NUMBER", "ORIGIN", "ARR_DELAY", "CANCELLED", "DISTANCE"
+                FROM flights {where_clause} ORDER BY "FL_DATE" DESC LIMIT 100
+            """, params).df()
+            st.dataframe(table_df, use_container_width=True, height=290)
+
+    with col_radar:
+        with st.container(border=True):
+            # Select list for radar chart dropdown
+            radar_airlines = airlines if airlines else ['UA', 'AA', 'DL', 'OO', 'MQ', 'YX']
+
+            selected_radar_airline = st.selectbox(
+                "Filter Radar Airline:",
+                options=radar_airlines,
+                format_func=lambda x: f"{x} - {AIRLINE_NAMES.get(str(x), 'Carrier')}",
+                key="radar_airline_selector"
+            )
+
+            st.plotly_chart(
+                create_airline_radar_chart(conn, selected_radar_airline), 
+                use_container_width=True
+            )
 
 # ==================== OTHER PAGES ====================
 elif page == "Departures Intelligence":
