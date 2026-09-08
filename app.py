@@ -334,8 +334,8 @@ def create_airline_connectivity_barchart(conn):
 
 from plotly.subplots import make_subplots
 
-def create_airline_radar_chart(conn, selected_airlines=None):
-    """Radar Charts in a subplots grid layout (2 rows x 3 columns) for individual airline viewing."""
+def create_airline_radar_chart(conn, selected_airline_code=None):
+    """Single radar chart dedicated to one filtered airline."""
     try:
         df_raw = conn.execute("SELECT * FROM flights").df()
         df_raw.columns = [c.upper() for c in df_raw.columns]
@@ -348,7 +348,7 @@ def create_airline_radar_chart(conn, selected_airlines=None):
 
         if not airline_col:
             fig = go.Figure()
-            fig.add_annotation(text="Airline column not found in dataset", showarrow=False)
+            fig.add_annotation(text="Airline column not found", showarrow=False)
             return fig
 
         if 'DEST' in df_raw.columns:
@@ -356,118 +356,73 @@ def create_airline_radar_chart(conn, selected_airlines=None):
         else:
             df_filtered = df_raw.copy()
 
-        if selected_airlines:
-            df_filtered = df_filtered[df_filtered[airline_col].astype(str).isin(selected_airlines)]
-
         df_filtered = df_filtered.dropna(subset=[airline_col])
+
+        # Default to the largest carrier if none specified
+        if not selected_airline_code:
+            top_carrier = df_filtered[airline_col].value_counts().index[0]
+            selected_airline_code = top_carrier
+
+        df_filtered = df_filtered[df_filtered[airline_col].astype(str) == str(selected_airline_code)]
 
         if df_filtered.empty:
             fig = go.Figure()
-            fig.add_annotation(text="No flight data matches current airline filter", showarrow=False)
+            fig.add_annotation(text=f"No flight data for {selected_airline_code}", showarrow=False)
             return fig
+
+        # Global max flights across the dataset for relative scaling
+        global_max_flights = df_raw.groupby(airline_col).size().max() or 1
 
         arr_delay = df_filtered['ARR_DELAY'] if 'ARR_DELAY' in df_filtered.columns else pd.Series(0, index=df_filtered.index)
         cancelled = df_filtered['CANCELLED'] if 'CANCELLED' in df_filtered.columns else pd.Series(0, index=df_filtered.index)
 
-        df_filtered['is_ontime'] = (arr_delay <= 15).astype(int)
-        df_filtered['pos_delay'] = arr_delay.apply(lambda x: x if pd.notna(x) and x > 0 else 0)
-        df_filtered['is_cancelled'] = (cancelled == 1).astype(int)
-
-        df_grouped = df_filtered.groupby(airline_col).agg(
-            total_flights=(airline_col, 'count'),
-            on_time_pct=('is_ontime', lambda x: round(x.mean() * 100, 2)),
-            avg_delay=('pos_delay', lambda x: round(x.mean(), 2)),
-            cancellation_rate=('is_cancelled', lambda x: round(x.mean() * 100, 2))
-        ).reset_index()
-
-        df_grouped = df_grouped.sort_values(by='total_flights', ascending=False).head(6)
+        total_flights = len(df_filtered)
+        on_time_pct = round((arr_delay <= 15).mean() * 100, 2)
+        pos_delays = arr_delay[arr_delay > 0]
+        avg_delay = round(pos_delays.mean(), 2) if not pos_delays.empty else 0.0
+        cancellation_rate = round((cancelled == 1).mean() * 100, 2)
+        flights_scaled = (total_flights / global_max_flights) * 100
 
     except Exception as e:
         fig = go.Figure()
         fig.add_annotation(text=f"Radar calculation error: {str(e)}", showarrow=False)
         return fig
 
-    num_airlines = len(df_grouped)
-    if num_airlines == 0:
-        fig = go.Figure()
-        fig.add_annotation(text="No airline performance data found", showarrow=False)
-        return fig
-
     categories = ['Flights (Scaled)', 'Cancellation Rate (%)', 'Avg Delay (mins)', 'On-Time %']
-    max_flights = df_grouped['total_flights'].max() if df_grouped['total_flights'].max() > 0 else 1
-    df_grouped['flights_scaled'] = (df_grouped['total_flights'] / max_flights) * 100
+    r_values = [flights_scaled, cancellation_rate, avg_delay, on_time_pct]
 
-    # Grid dimensions (Up to 3 columns, auto rows)
-    cols = min(3, num_airlines)
-    rows = (num_airlines + cols - 1) // cols
+    carrier_name = AIRLINE_NAMES.get(str(selected_airline_code), 'Carrier')
+    airline_label = f"{selected_airline_code} ({carrier_name})"
 
-    subplot_titles = [
-        f"<b>{str(row[airline_col])}</b> ({AIRLINE_NAMES.get(str(row[airline_col]), 'Carrier')})" 
-        for _, row in df_grouped.iterrows()
-    ]
-
-    fig = make_subplots(
-        rows=rows, 
-        cols=cols, 
-        specs=[[{'type': 'polar'} for _ in range(cols)] for _ in range(rows)],
-        subplot_titles=subplot_titles,
-        vertical_spacing=0.18,
-        horizontal_spacing=0.08
+    hover_text = (
+        f"<b>{airline_label}</b><br>"
+        f"Total Flights: {total_flights:,}<br>"
+        f"Cancellation Rate: {cancellation_rate}%<br>"
+        f"Avg Delay: {avg_delay} mins<br>"
+        f"On-Time: {on_time_pct}%"
     )
 
-    colors = ['#0066CC', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899']
-
-    for idx, row in df_grouped.reset_index(drop=True).iterrows():
-        r_idx = (idx // cols) + 1
-        c_idx = (idx % cols) + 1
-        
-        airline_code = str(row[airline_col])
-        airline_label = f"{airline_code} ({AIRLINE_NAMES.get(airline_code, 'Carrier')})"
-
-        r_values = [
-            row['flights_scaled'],
-            row['cancellation_rate'],
-            row['avg_delay'],
-            row['on_time_pct']
-        ]
-
-        hover_text = (
-            f"<b>{airline_label}</b><br>"
-            f"Total Flights: {int(row['total_flights']):,}<br>"
-            f"Cancellation Rate: {row['cancellation_rate']}%<br>"
-            f"Avg Delay: {row['avg_delay']} mins<br>"
-            f"On-Time: {row['on_time_pct']}%"
-        )
-
-        fig.add_trace(
-            go.Scatterpolar(
-                r=r_values + [r_values[0]],
-                theta=categories + [categories[0]],
-                fill='toself',
-                name=airline_label,
-                hoverinfo='text',
-                text=hover_text,
-                line=dict(color=colors[idx % len(colors)], width=2),
-                opacity=0.45,
-                showlegend=False
-            ),
-            row=r_idx, col=c_idx
-        )
-
-    # Apply uniform axis styling across all subplots
-    for i in range(1, (rows * cols) + 1):
-        axis_key = f"polar{i}" if i > 1 else "polar"
-        fig.update_layout({
-            axis_key: dict(
-                radialaxis=dict(visible=True, range=[0, 100], color="#94A3B8", tickfont=dict(size=8)),
-                angularaxis=dict(color="#0F172A", tickfont=dict(size=9, weight="bold"))
-            )
-        })
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(
+        r=r_values + [r_values[0]],
+        theta=categories + [categories[0]],
+        fill='toself',
+        name=airline_label,
+        hoverinfo='text',
+        text=hover_text,
+        line=dict(color='#0066CC', width=2),
+        fillcolor='rgba(0, 102, 204, 0.25)'
+    ))
 
     fig.update_layout(
-        title=dict(text="🎯 Airline Performance Radar Comparison (Grid View)", font=dict(size=15, color="#0F172A")),
-        height=320 * rows,
-        margin=dict(l=30, r=30, t=50, b=30),
+        title=dict(text=f"🎯 {airline_label} Performance", font=dict(size=14, color="#0F172A")),
+        polar=dict(
+            radialaxis=dict(visible=True, range=[0, 100], color="#64748B"),
+            angularaxis=dict(color="#0F172A")
+        ),
+        showlegend=False,
+        height=320,
+        margin=dict(l=20, r=20, t=40, b=20),
         paper_bgcolor="#FFFFFF"
     )
     return fig
