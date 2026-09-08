@@ -206,7 +206,6 @@ def create_monthly_kpi_chart(data, x_col, y_col, bar_color="#0066CC"):
     return fig
 
 def create_3d_arrivals_map_all(conn):
-    # Fixed query targeting all inbound flights to ORD regardless of airline
     origins_df = conn.execute("""
         SELECT "ORIGIN", COUNT(*) AS flight_count
         FROM flights 
@@ -266,25 +265,19 @@ def create_3d_arrivals_map_all(conn):
 
 def create_airline_connectivity_barchart(conn):
     try:
-        # Load raw data safely without case-sensitive quoted aliases
         raw_df = conn.execute("SELECT * FROM flights LIMIT 10000").df()
-        
-        # Standardize column names to uppercase
         raw_df.columns = [c.upper() for c in raw_df.columns]
         
-        # Determine airline and origin columns dynamically
         airline_col = 'AIRLINE_CODE' if 'AIRLINE_CODE' in raw_df.columns else ('AIRLINE' if 'AIRLINE' in raw_df.columns else None)
         origin_col = 'ORIGIN' if 'ORIGIN' in raw_df.columns else None
         dest_col = 'DEST' if 'DEST' in raw_df.columns else None
 
         if airline_col and origin_col:
-            # Filter for ORD if destination column exists
             if dest_col:
                 filtered_df = raw_df[raw_df[dest_col] == 'ORD']
             else:
                 filtered_df = raw_df
 
-            # Group and aggregate in Pandas
             df = filtered_df.groupby(airline_col).agg(
                 unique_routes=(origin_col, 'nunique'),
                 total_flights=(origin_col, 'count')
@@ -295,7 +288,7 @@ def create_airline_connectivity_barchart(conn):
         else:
             df = pd.DataFrame()
 
-    except Exception as e:
+    except Exception:
         df = pd.DataFrame()
 
     if df.empty:
@@ -303,7 +296,6 @@ def create_airline_connectivity_barchart(conn):
         fig.add_annotation(text="No data available - Check Dataset Columns", showarrow=False)
         return fig
 
-    # Map carrier codes to names
     df['airline_name'] = df['airline'].apply(lambda x: f"{x} ({AIRLINE_NAMES.get(str(x), 'Carrier')})")
 
     fig = px.bar(
@@ -330,7 +322,85 @@ def create_airline_connectivity_barchart(conn):
         margin=dict(l=10, r=30, t=40, b=10)
     )
     return fig
+
+def create_airline_radar_chart(conn):
+    """Radar Chart benchmarking top airlines across 4 core operational metrics."""
+    query = """
+        SELECT 
+            "AIRLINE_CODE" AS airline,
+            COUNT(*) AS total_flights,
+            ROUND(AVG(CASE WHEN "ARR_DELAY" <= 15 THEN 1.0 ELSE 0.0 END) * 100, 2) AS on_time_pct,
+            ROUND(AVG(CASE WHEN "ARR_DELAY" > 0 THEN "ARR_DELAY" ELSE 0 END), 2) AS avg_delay,
+            ROUND(AVG(CASE WHEN "CANCELLED" = 1 THEN 1.0 ELSE 0.0 END) * 100, 2) AS cancellation_rate
+        FROM flights
+        WHERE "DEST" = 'ORD' AND "AIRLINE_CODE" IS NOT NULL
+        GROUP BY airline
+        HAVING COUNT(*) > 50
+        ORDER BY total_flights DESC
+        LIMIT 6
+    """
+    try:
+        df = conn.execute(query).df()
+    except Exception:
+        df = pd.DataFrame()
+
+    if df.empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No airline performance data available", showarrow=False)
+        return fig
+
+    categories = ['Flights (Scaled)', 'Cancellation Rate (%)', 'Avg Delay (mins)', 'On-Time %']
     
+    max_flights = df['total_flights'].max() if not df['total_flights'].empty else 1
+    df['flights_scaled'] = (df['total_flights'] / max_flights) * 100
+
+    fig = go.Figure()
+    colors = ['#0066CC', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899']
+
+    for idx, row in df.iterrows():
+        airline_code = str(row['airline'])
+        airline_label = f"{airline_code} ({AIRLINE_NAMES.get(airline_code, 'Carrier')})"
+
+        r_values = [
+            row['flights_scaled'],
+            row['cancellation_rate'],
+            row['avg_delay'],
+            row['on_time_pct']
+        ]
+        
+        hover_text = (
+            f"<b>{airline_label}</b><br>"
+            f"Total Flights: {int(row['total_flights']):,}<br>"
+            f"Cancellation Rate: {row['cancellation_rate']}%<br>"
+            f"Avg Delay: {row['avg_delay']} mins<br>"
+            f"On-Time: {row['on_time_pct']}%"
+        )
+
+        fig.add_trace(go.Scatterpolar(
+            r=r_values + [r_values[0]],
+            theta=categories + [categories[0]],
+            fill='toself',
+            name=airline_label,
+            hoverinfo='text',
+            text=hover_text,
+            line=dict(color=colors[idx % len(colors)], width=2),
+            opacity=0.5
+        ))
+
+    fig.update_layout(
+        title=dict(text="🎯 Airline Performance Radar Comparison", font=dict(size=14, color="#0F172A")),
+        polar=dict(
+            radialaxis=dict(visible=True, range=[0, 100], color="#64748B"),
+            angularaxis=dict(color="#0F172A")
+        ),
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=-0.35, xanchor="center", x=0.5),
+        height=420,
+        margin=dict(l=40, r=40, t=50, b=80),
+        paper_bgcolor="#FFFFFF"
+    )
+    return fig
+
 def render_flight_card_clean(row, is_delayed=False):
     origin_code = row['ORIGIN']
     airline_code = row['AIRLINE_CODE']
@@ -488,14 +558,10 @@ if page == "Arrivals Intelligence":
 
     with col_right:
         with st.container(border=True):
-            # map_airline = st.selectbox("Filter Map by Airline:", ["All Airlines"] + airlines)
             st.plotly_chart(create_3d_arrivals_map_all(conn), use_container_width=True)
 
         with st.container(border=True):
-            # REPLACED: Option 1 Parallel Categories Chart
             st.plotly_chart(create_airline_connectivity_barchart(conn), use_container_width=True)
-            
-            # Updated line in app.py
 
     # Simplified Flight Cards Section
     col_longest, col_delayed = st.columns(2)
@@ -590,30 +656,9 @@ if page == "Arrivals Intelligence":
         """, params).df()
         st.dataframe(table_df, use_container_width=True, height=260)
 
-    # Origin Hub Stress Test (Quadrant Chart - Without Labels)
+    # Replaced Section: Airline Multi-Metric Radar Chart
     with st.container(border=True):
-        st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>🎯 Origin Hub Stress Test (Volume vs Avg Delay)</div>", unsafe_allow_html=True)
-        quad_df = conn.execute(f"""
-            SELECT "ORIGIN", COUNT(*) AS flight_count, AVG("ARR_DELAY") AS avg_delay
-            FROM flights {where_clause} GROUP BY "ORIGIN" HAVING flight_count > 10
-        """, params).df()
-
-        avg_vol = quad_df['flight_count'].mean() if not quad_df.empty else 0
-        avg_del = quad_df['avg_delay'].mean() if not quad_df.empty else 0
-
-        fig_quad = px.scatter(
-            quad_df, x='flight_count', y='avg_delay',
-            hover_data=['ORIGIN'],
-            labels={'flight_count': 'Total Inbound Volume', 'avg_delay': 'Average Delay (Minutes)'}
-        )
-        fig_quad.update_traces(marker=dict(size=9, color='#0066CC', opacity=0.75))
-        fig_quad = apply_white_chart_theme(fig_quad)
-        
-        fig_quad.add_hline(y=avg_del, line_dash="dash", line_color="#94A3B8")
-        fig_quad.add_vline(x=avg_vol, line_dash="dash", line_color="#94A3B8")
-
-        fig_quad.update_layout(height=320, margin=dict(l=10, r=10, t=20, b=10))
-        st.plotly_chart(fig_quad, use_container_width=True)
+        st.plotly_chart(create_airline_radar_chart(conn), use_container_width=True)
 
 # ==================== OTHER PAGES ====================
 elif page == "Departures Intelligence":
