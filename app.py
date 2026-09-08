@@ -54,27 +54,28 @@ AIRPORT_CITY_NAMES = {
 # Global CSS Adjustments
 st.markdown("""
 <style>
-    /* Force Canvas Background */
+    /* Canvas Background */
     .stApp {
         background-color: #F8FAFC !important;
     }
     
-    /* Consolidated KPI Box Border Styling */
+    /* Consolidated KPI Box Border Styling (Only single outer border) */
     div[data-testid="stColumn"] > div {
         background-color: #FFFFFF !important;
         border: 1px solid #CBD5E1 !important;
         border-radius: 10px !important;
-        padding: 12px 8px 4px 8px !important;
+        padding: 10px 6px 2px 6px !important;
         box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
     }
 
-    /* Wrap Streamlit Containers in Clean Cards */
+    /* Outer Wrapper Container Styles */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #FFFFFF !important;
         border-radius: 10px !important;
         border: 1px solid #CBD5E1 !important;
         padding: 16px !important;
         box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+        margin-bottom: 12px !important;
     }
 
     /* Segmented Control Styling */
@@ -82,90 +83,60 @@ st.markdown("""
         background-color: #F1F5F9 !important;
         border-radius: 8px !important;
         padding: 3px !important;
-        margin-bottom: 12px !important;
+        margin-bottom: 8px !important;
     }
 
-    /* Flight Card Styling */
-    .flight-widget-card {
-        background-color: #ffffff !important;
-        border: 1px solid #cbd5e1 !important;
+    /* Clean Streamlit Dataframe Background */
+    div[data-testid="stDataFrame"] {
+        background-color: #FFFFFF !important;
         border-radius: 8px !important;
-        padding: 10px 14px !important;
-        margin-bottom: 10px !important;
     }
-    .flight-card-badge {
-        background-color: #f1f5f9;
-        color: #0f172a;
-        font-size: 0.72rem;
-        font-weight: 700;
-        padding: 2px 8px;
-        border-radius: 4px;
-        border: 1px solid #cbd5e1;
-        display: inline-block;
-        margin-bottom: 6px;
+
+    /* Streamlit Dataframe Table Override */
+    div[data-testid="stDataFrame"] > div {
+        background-color: #FFFFFF !important;
     }
-    .flight-route-header {
+
+    /* Simplified Readable Flight Cards */
+    .flight-clean-card {
+        background-color: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 8px 12px;
+        margin-bottom: 8px;
         display: flex;
         justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: 6px;
-    }
-    .airport-code {
-        font-size: 1.4rem;
-        font-weight: 800;
-        color: #0F172A;
-        line-height: 1;
-    }
-    .route-line-container {
-        flex-grow: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 0 12px;
-        margin-top: 2px;
-    }
-    .flight-duration {
-        font-size: 0.75rem;
-        color: #475569;
-        font-weight: 600;
-        margin-bottom: 2px;
-    }
-    .route-line {
-        width: 100%;
-        height: 1px;
-        background-color: #cbd5e1;
-        position: relative;
-        display: flex;
-        justify-content: center;
         align-items: center;
     }
-    .plane-icon {
-        font-size: 0.8rem;
-        color: #0066CC;
-        background-color: #ffffff;
-        padding: 0 4px;
+    .flight-clean-card.delayed {
+        border-left: 4px solid #D00000;
     }
-    .flight-details-grid {
-        display: grid;
-        grid-template-columns: 1fr 1.2fr;
-        gap: 8px;
-        border-top: 1px solid #f1f5f9;
-        padding-top: 8px;
-        margin-top: 6px;
+    .flight-clean-card.normal {
+        border-left: 4px solid #0066CC;
     }
-    .flight-column-left {
-        border-right: 1px solid #f1f5f9;
-        padding-right: 6px;
-    }
-    .time-display {
-        font-size: 0.95rem;
+    .flight-code-title {
+        font-size: 0.88rem;
         font-weight: 700;
-        margin-top: 1px;
+        color: #0F172A;
     }
-    .detail-label {
+    .flight-sub-info {
+        font-size: 0.75rem;
         color: #64748B;
-        font-size: 0.7rem;
-        font-weight: 500;
+    }
+    .flight-badge-status {
+        font-size: 0.78rem;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 4px;
+        text-align: right;
+    }
+    .badge-delay {
+        background-color: #FEF2F2;
+        color: #D00000;
+    }
+    .badge-normal {
+        background-color: #F0FDF4;
+        color: #10B981;
     }
 
     /* Sidebar Styling */
@@ -232,7 +203,7 @@ def apply_white_chart_theme(fig):
         font=dict(color="#0f172a", family="sans-serif"),
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#FFFFFF",
-        title=dict(font=dict(color="#0f172a", size=15, weight="bold")),
+        title=dict(font=dict(color="#0f172a", size=14, weight="bold")),
         xaxis=dict(
             title=dict(font=dict(color="#0f172a")),
             tickfont=dict(color="#0f172a"),
@@ -266,15 +237,16 @@ def create_monthly_kpi_chart(data, x_col, y_col, bar_color="#0066CC"):
         hovertemplate="%{x}: %{y:,.1f}<extra></extra>"
     )
     fig.update_layout(
-        margin=dict(l=0, r=0, t=2, b=15),
-        height=65,
+        margin=dict(l=2, r=2, t=4, b=22),
+        height=80,
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#FFFFFF",
         xaxis=dict(
+            visible=True,
             type='category',
             categoryorder='array',
             categoryarray=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-            tickfont=dict(size=8, color='#475569', weight='bold'),
+            tickfont=dict(size=8, color='#475569'),
             showgrid=False,
             zeroline=False,
             fixedrange=True,
@@ -339,7 +311,7 @@ def create_3d_arrivals_map_all(conn, selected_airlines=None):
     ))
 
     fig.update_layout(
-        title=dict(text="🌐 3D Dynamic Arrivals Map", font=dict(size=15, color="#0f172a")),
+        title=dict(text="🌐 3D Dynamic Arrivals Map", font=dict(size=14, color="#0f172a")),
         geo=dict(
             scope='north america',
             projection_type='orthographic',
@@ -353,7 +325,7 @@ def create_3d_arrivals_map_all(conn, selected_airlines=None):
             center=dict(lat=38.0, lon=-97.0),
             projection_scale=1.15
         ),
-        margin=dict(l=0, r=0, t=35, b=0),
+        margin=dict(l=0, r=0, t=30, b=0),
         height=320,
         paper_bgcolor="#FFFFFF"
     )
@@ -376,7 +348,6 @@ def create_airline_to_origin_sankey(conn, selected_airlines=None):
         {where_clause}
         GROUP BY "AIRLINE_CODE", "ORIGIN"
         ORDER BY flight_count DESC
-        LIMIT 20
     """, params).df()
 
     if sankey_data.empty:
@@ -384,7 +355,9 @@ def create_airline_to_origin_sankey(conn, selected_airlines=None):
         fig.add_annotation(text="No data available for Sankey diagram", showarrow=False)
         return fig
 
-    airlines_list = list(sankey_data['AIRLINE_CODE'].unique())
+    # Sort airlines by overall flight volume / connectivity
+    airline_totals = sankey_data.groupby('AIRLINE_CODE')['flight_count'].sum().sort_values(ascending=False)
+    airlines_list = list(airline_totals.index)
     origins_list = list(sankey_data['ORIGIN'].unique())
     all_nodes = airlines_list + origins_list
     
@@ -400,10 +373,10 @@ def create_airline_to_origin_sankey(conn, selected_airlines=None):
     node_colors = ['#0066CC'] * len(airlines_list) + ['#0A192F'] * len(origins_list)
 
     fig = go.Figure(data=[go.Sankey(
-        arrangement="fixed",
+        arrangement="snap",
         node=dict(
-            pad=14,
-            thickness=18,
+            pad=10,
+            thickness=14,
             line=dict(color="#CBD5E1", width=1),
             label=all_nodes,
             color=node_colors
@@ -412,92 +385,46 @@ def create_airline_to_origin_sankey(conn, selected_airlines=None):
             source=sources,
             target=targets,
             value=values,
-            color='rgba(0, 102, 204, 0.25)'
+            color='rgba(0, 102, 204, 0.2)'
         )
     )])
 
     fig.update_layout(
-        title=dict(text="🔀 Airline ➔ Origin Connectivity Flow", font=dict(size=15, color="#0F172A")),
-        font=dict(size=11, color='#0F172A', family="sans-serif"),
-        height=320,
+        title=dict(text="🔀 Airline ➔ Origin Connectivity Flow", font=dict(size=14, color="#0F172A")),
+        font=dict(size=10, color='#0F172A', family="sans-serif"),
+        height=380,
         margin=dict(l=10, r=10, t=35, b=10),
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#FFFFFF"
     )
     return fig
 
-def render_flight_card(row, is_delayed=False):
+# Simplified Readable Flight Card Rendering
+def render_flight_card_clean(row, is_delayed=False):
     origin_code = row['ORIGIN']
-    origin_city = row['ORIGIN_CITY']
     airline_code = row['AIRLINE_CODE']
     fl_number = row['FL_NUMBER']
-    fl_date = str(row['FL_DATE'])
-    formatted_date = f"{fl_date[6:8]}/{fl_date[4:6]}/{fl_date[:4]}" if len(fl_date) == 8 else fl_date
     
     elapsed_time = safe_int(row['elapsed_time'])
     hours, mins = divmod(elapsed_time, 60)
     time_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
     
     dep_time = format_time_str(row['crs_dep'])
-    crs_arr_time = format_time_str(row['crs_arr'])
     actual_arr_time = format_time_str(row['actual_arr'])
     delay_val = safe_int(row['arr_delay'])
 
-    if is_delayed:
-        card_style = 'style="border-left: 4px solid #D00000 !important;"'
-        badge_style = 'style="background-color: #FEF2F2; color: #D00000; border-color: #FCA5A5;"'
-        badge_prefix = "⚠️ "
-        duration_style = 'style="color: #D00000; font-weight: 700;"'
-        icon_style = 'style="color: #D00000;"'
-        delay_color = "#D00000"
-    else:
-        card_style = ""
-        badge_style = ""
-        badge_prefix = "✈️ "
-        duration_style = ""
-        icon_style = ""
-        delay_color = "#10B981" if delay_val <= 0 else "#D00000"
+    card_class = "delayed" if is_delayed else "normal"
+    badge_class = "badge-delay" if is_delayed else "badge-normal"
+    delay_text = f"+{delay_val}m" if delay_val > 0 else f"{delay_val}m"
 
     st.markdown(f"""
-    <div class="flight-widget-card" {card_style}>
+    <div class="flight-clean-card {card_class}">
         <div>
-            <span class="flight-card-badge" {badge_style}>{badge_prefix}{airline_code} #{fl_number}</span>
+            <div class="flight-code-title">{airline_code} {fl_number} · {origin_code} ➔ ORD</div>
+            <div class="flight-sub-info">Dep: {dep_time} | Arr: {actual_arr_time} | Duration: {time_str}</div>
         </div>
-        <div class="flight-route-header">
-            <div>
-                <div class="airport-code">{origin_code}</div>
-            </div>
-            <div class="route-line-container">
-                <span class="flight-duration" {duration_style}>{time_str}</span>
-                <div class="route-line">
-                    <span class="plane-icon" {icon_style}>✈️</span>
-                </div>
-            </div>
-            <div style="text-align: right;">
-                <div class="airport-code">ORD</div>
-            </div>
-        </div>
-        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #475569;">
-            <div><strong>{origin_city}</strong> · {formatted_date}</div>
-            <div><strong>Chicago</strong> · {formatted_date}</div>
-        </div>
-        <div class="flight-details-grid">
-            <div class="flight-column-left">
-                <div class="detail-label">Sched. Dep</div>
-                <div class="time-display" style="color: #0066CC;">{dep_time}</div>
-            </div>
-            <div>
-                <div style="display: flex; justify-content: space-between;">
-                    <div>
-                        <div class="detail-label">Sched. Arr</div>
-                        <div class="time-display" style="color: #0F172A;">{crs_arr_time}</div>
-                    </div>
-                    <div style="text-align: right;">
-                        <div class="detail-label">Actual / Delay</div>
-                        <div class="time-display" style="color: {delay_color};">{actual_arr_time} ({delay_val:+}m)</div>
-                    </div>
-                </div>
-            </div>
+        <div class="flight-badge-status {badge_class}">
+            {delay_text if is_delayed else 'On-Time'}
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -554,14 +481,14 @@ if page == "Arrivals Intelligence":
         ORDER BY month
     """, params).df()
 
-    # Unified KPI Box Containers
+    # KPI Top Row Section
     c1, c2, c3, c4, c5 = st.columns(5)
     
     with c1:
         st.markdown(f"""
             <div style="text-align: center;">
                 <div style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase;">TOTAL ARRIVALS</div>
-                <div style="font-size: 1.4rem; font-weight: 800; color: #0A192F; margin-bottom: 2px;">{safe_int(total_flights):,}</div>
+                <div style="font-size: 1.3rem; font-weight: 800; color: #0A192F; margin-bottom: 2px;">{safe_int(total_flights):,}</div>
             </div>
         """, unsafe_allow_html=True)
         st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#0066CC'), use_container_width=True, config={'displayModeBar': False})
@@ -570,7 +497,7 @@ if page == "Arrivals Intelligence":
         st.markdown(f"""
             <div style="text-align: center;">
                 <div style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase;">ON-TIME % (≤15M)</div>
-                <div style="font-size: 1.4rem; font-weight: 800; color: #10B981; margin-bottom: 2px;">{(on_time_pct or 0):.1f}%</div>
+                <div style="font-size: 1.3rem; font-weight: 800; color: #10B981; margin-bottom: 2px;">{(on_time_pct or 0):.1f}%</div>
             </div>
         """, unsafe_allow_html=True)
         st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'on_time', '#10B981'), use_container_width=True, config={'displayModeBar': False})
@@ -579,7 +506,7 @@ if page == "Arrivals Intelligence":
         st.markdown(f"""
             <div style="text-align: center;">
                 <div style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase;">AVG DELAY</div>
-                <div style="font-size: 1.4rem; font-weight: 800; color: #D00000; margin-bottom: 2px;">{(avg_delay or 0):.1f}m</div>
+                <div style="font-size: 1.3rem; font-weight: 800; color: #D00000; margin-bottom: 2px;">{(avg_delay or 0):.1f}m</div>
             </div>
         """, unsafe_allow_html=True)
         st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'delay', '#D00000'), use_container_width=True, config={'displayModeBar': False})
@@ -588,7 +515,7 @@ if page == "Arrivals Intelligence":
         st.markdown(f"""
             <div style="text-align: center;">
                 <div style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase;">CANCELLED</div>
-                <div style="font-size: 1.4rem; font-weight: 800; color: #0A192F; margin-bottom: 2px;">{safe_int(total_cancelled):,}</div>
+                <div style="font-size: 1.3rem; font-weight: 800; color: #0A192F; margin-bottom: 2px;">{safe_int(total_cancelled):,}</div>
             </div>
         """, unsafe_allow_html=True)
         st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'cancelled', '#64748B'), use_container_width=True, config={'displayModeBar': False})
@@ -597,7 +524,7 @@ if page == "Arrivals Intelligence":
         st.markdown(f"""
             <div style="text-align: center;">
                 <div style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase;">DIVERTED</div>
-                <div style="font-size: 1.4rem; font-weight: 800; color: #0A192F; margin-bottom: 2px;">{safe_int(total_diverted):,}</div>
+                <div style="font-size: 1.3rem; font-weight: 800; color: #0A192F; margin-bottom: 2px;">{safe_int(total_diverted):,}</div>
             </div>
         """, unsafe_allow_html=True)
         st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'diverted', '#38BDF8'), use_container_width=True, config={'displayModeBar': False})
@@ -608,9 +535,8 @@ if page == "Arrivals Intelligence":
     col_left, col_right = st.columns([1, 1])
 
     with col_left:
-        # Segmented Control & Bar Charts grouped in a single white card box
+        # Segmented Control & Top 10 Bar Charts grouped in a single outer border container
         with st.container(border=True):
-            st.markdown("<span style='font-size:0.85rem; font-weight:600; color:#0f172a;'>Select Metric for Charts Below:</span>", unsafe_allow_html=True)
             measure = st.segmented_control(
                 "",
                 ["Flights Count", "On-Time %", "Cancellations", "Avg Delay (min)"],
@@ -626,38 +552,40 @@ if page == "Arrivals Intelligence":
             }
             sql_val, sql_ord = measure_map[measure]
 
-            # Top 5 Airlines Bar Chart
+            # Top 10 Airlines Bar Chart
             airlines_df = conn.execute(f"""
                 SELECT "AIRLINE_CODE" AS code, {sql_val} AS val
                 FROM flights {where_clause}
-                GROUP BY code ORDER BY val {sql_ord} LIMIT 5
+                GROUP BY code ORDER BY val {sql_ord} LIMIT 10
             """, params).df()
             airlines_df['full_label'] = airlines_df['code'].apply(lambda x: f"{x} ({AIRLINE_NAMES.get(x, 'Carrier')})")
 
             fig_air = px.bar(
                 airlines_df, y='full_label', x='val', orientation='h',
-                title=f"Top 5 Airlines by {measure}"
+                title=f"Top 10 Airlines by {measure}",
+                text_auto='.1f' if 'Delay' in measure or 'Time' in measure else True
             )
-            fig_air.update_traces(marker_color="#0066CC")
+            fig_air.update_traces(marker_color="#0066CC", textposition="outside")
             fig_air = apply_white_chart_theme(fig_air)
-            fig_air.update_layout(yaxis=dict(autorange="reversed", title=""), xaxis=dict(title=measure), margin=dict(l=10, r=10, t=35, b=10), height=230)
+            fig_air.update_layout(yaxis=dict(autorange="reversed", title=""), xaxis=dict(title=measure), margin=dict(l=10, r=25, t=35, b=10), height=320)
             st.plotly_chart(fig_air, use_container_width=True)
 
-            # Top 5 Destinations Bar Chart
+            # Top 10 Origins Bar Chart
             origins_df = conn.execute(f"""
                 SELECT "ORIGIN" AS code, {sql_val} AS val
                 FROM flights {where_clause}
-                GROUP BY code ORDER BY val {sql_ord} LIMIT 5
+                GROUP BY code ORDER BY val {sql_ord} LIMIT 10
             """, params).df()
             origins_df['full_label'] = origins_df['code'].apply(lambda x: f"{x} ({AIRPORT_CITY_NAMES.get(x, 'Origin')})")
 
             fig_orig = px.bar(
                 origins_df, y='full_label', x='val', orientation='h',
-                title=f"Top 5 Origin Destinations by {measure}"
+                title=f"Top 10 Origin Destinations by {measure}",
+                text_auto='.1f' if 'Delay' in measure or 'Time' in measure else True
             )
-            fig_orig.update_traces(marker_color="#0066CC")
+            fig_orig.update_traces(marker_color="#0066CC", textposition="outside")
             fig_orig = apply_white_chart_theme(fig_orig)
-            fig_orig.update_layout(yaxis=dict(autorange="reversed", title=""), xaxis=dict(title=measure), margin=dict(l=10, r=10, t=35, b=10), height=230)
+            fig_orig.update_layout(yaxis=dict(autorange="reversed", title=""), xaxis=dict(title=measure), margin=dict(l=10, r=25, t=35, b=10), height=320)
             st.plotly_chart(fig_orig, use_container_width=True)
 
     with col_right:
@@ -669,50 +597,52 @@ if page == "Arrivals Intelligence":
         with st.container(border=True):
             st.plotly_chart(create_airline_to_origin_sankey(conn, selected_airline), use_container_width=True)
 
-    # Flight Cards Section
+    # Simplified Readable Flight Cards Section
     col_longest, col_delayed = st.columns(2)
 
     with col_longest:
-        st.subheader("✈️ Top 5 Longest Inbound Routes")
-        longest_df = conn.execute(f"""
-            SELECT 
-                "FL_NUMBER", "AIRLINE_CODE", "ORIGIN", "ORIGIN_CITY", "FL_DATE",
-                COALESCE("CRS_DEP_TIME", 0) AS crs_dep,
-                COALESCE("CRS_ARR_TIME", 0) AS crs_arr,
-                COALESCE("ARR_TIME", 0) AS actual_arr,
-                COALESCE("ELAPSED_TIME", 0) AS elapsed_time,
-                COALESCE("ARR_DELAY", 0) AS arr_delay
-            FROM flights {where_clause}
-            ORDER BY "ELAPSED_TIME" DESC LIMIT 5
-        """, params).df()
+        with st.container(border=True):
+            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 10px;'>✈️ Top 5 Longest Inbound Routes</div>", unsafe_allow_html=True)
+            longest_df = conn.execute(f"""
+                SELECT 
+                    "FL_NUMBER", "AIRLINE_CODE", "ORIGIN", "ORIGIN_CITY", "FL_DATE",
+                    COALESCE("CRS_DEP_TIME", 0) AS crs_dep,
+                    COALESCE("CRS_ARR_TIME", 0) AS crs_arr,
+                    COALESCE("ARR_TIME", 0) AS actual_arr,
+                    COALESCE("ELAPSED_TIME", 0) AS elapsed_time,
+                    COALESCE("ARR_DELAY", 0) AS arr_delay
+                FROM flights {where_clause}
+                ORDER BY "ELAPSED_TIME" DESC LIMIT 5
+            """, params).df()
 
-        for idx, row in longest_df.iterrows():
-            render_flight_card(row, is_delayed=False)
+            for idx, row in longest_df.iterrows():
+                render_flight_card_clean(row, is_delayed=False)
 
     with col_delayed:
-        st.subheader("⚠️ Top 5 Most Delayed Inbound Flights")
-        delayed_df = conn.execute(f"""
-            SELECT 
-                "FL_NUMBER", "AIRLINE_CODE", "ORIGIN", "ORIGIN_CITY", "FL_DATE",
-                COALESCE("CRS_DEP_TIME", 0) AS crs_dep,
-                COALESCE("CRS_ARR_TIME", 0) AS crs_arr,
-                COALESCE("ARR_TIME", 0) AS actual_arr,
-                COALESCE("ELAPSED_TIME", 0) AS elapsed_time,
-                COALESCE("ARR_DELAY", 0) AS arr_delay
-            FROM flights {where_clause}
-            ORDER BY "ARR_DELAY" DESC LIMIT 5
-        """, params).df()
+        with st.container(border=True):
+            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 10px;'>⚠️ Top 5 Most Delayed Inbound Flights</div>", unsafe_allow_html=True)
+            delayed_df = conn.execute(f"""
+                SELECT 
+                    "FL_NUMBER", "AIRLINE_CODE", "ORIGIN", "ORIGIN_CITY", "FL_DATE",
+                    COALESCE("CRS_DEP_TIME", 0) AS crs_dep,
+                    COALESCE("CRS_ARR_TIME", 0) AS crs_arr,
+                    COALESCE("ARR_TIME", 0) AS actual_arr,
+                    COALESCE("ELAPSED_TIME", 0) AS elapsed_time,
+                    COALESCE("ARR_DELAY", 0) AS arr_delay
+                FROM flights {where_clause}
+                ORDER BY "ARR_DELAY" DESC LIMIT 5
+            """, params).df()
 
-        for idx, row in delayed_df.iterrows():
-            render_flight_card(row, is_delayed=True)
+            for idx, row in delayed_df.iterrows():
+                render_flight_card_clean(row, is_delayed=True)
 
     # Temporal Heatmap & Vertical Delay Bar Drivers
     c_heat, c_delay = st.columns([1.3, 1])
 
     with c_heat:
         with st.container(border=True):
-            st.subheader("Arrival Volume Heatmap")
-            heat_dim = st.segmented_control("Perspective:", ["Month vs. Hour", "Day of Week vs. Hour"], default="Month vs. Hour")
+            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>Arrival Volume Heatmap</div>", unsafe_allow_html=True)
+            heat_dim = st.segmented_control("", ["Month vs. Hour", "Day of Week vs. Hour"], default="Month vs. Hour", label_visibility="collapsed")
             
             if heat_dim == "Month vs. Hour":
                 heat_df = conn.execute(f"""
@@ -741,20 +671,26 @@ if page == "Arrivals Intelligence":
 
             pivot_heat = heat_df.pivot(index='row_dim', columns='hour', values='flights').fillna(0)
             
-            fig_heat = px.imshow(
-                pivot_heat, 
-                labels=dict(x="Hour of Day (24h)", y=y_label, color="Flights"),
-                color_continuous_scale="Blues",
-                title=None
-            )
+            # Using go.Heatmap directly prevents PX title="undefined" bugs
+            fig_heat = go.Figure(data=go.Heatmap(
+                z=pivot_heat.values,
+                x=pivot_heat.columns,
+                y=pivot_heat.index,
+                colorscale="Blues"
+            ))
             fig_heat.update_traces(xgap=2, ygap=2)
             fig_heat = apply_white_chart_theme(fig_heat)
-            fig_heat.update_layout(height=280, margin=dict(l=10, r=10, t=10, b=10))
+            fig_heat.update_layout(
+                height=280, 
+                margin=dict(l=10, r=10, t=10, b=10),
+                xaxis_title="Hour of Day (24h)",
+                yaxis_title=y_label
+            )
             st.plotly_chart(fig_heat, use_container_width=True)
 
     with c_delay:
         with st.container(border=True):
-            st.subheader("Arrival Delay Drivers")
+            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>Arrival Delay Drivers</div>", unsafe_allow_html=True)
             delay_df = conn.execute(f"""
                 SELECT 
                     AVG("DELAY_DUE_CARRIER") AS Carrier,
@@ -776,7 +712,7 @@ if page == "Arrivals Intelligence":
                 title="Avg Delay Contribution (Minutes)",
                 text_auto='.1f'
             )
-            fig_delay_bar.update_traces(marker_color='#0066CC')
+            fig_delay_bar.update_traces(marker_color='#0066CC', textposition='outside')
             fig_delay_bar = apply_white_chart_theme(fig_delay_bar)
             fig_delay_bar.update_layout(
                 height=280,
@@ -786,9 +722,9 @@ if page == "Arrivals Intelligence":
             )
             st.plotly_chart(fig_delay_bar, use_container_width=True)
 
-    # Flight Records Inspector Table
+    # Pure White Background Flight Table Section
     with st.container(border=True):
-        st.subheader("📋 Inbound Flight Records Table")
+        st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 10px;'>📋 Inbound Flight Records Table</div>", unsafe_allow_html=True)
         table_df = conn.execute(f"""
             SELECT "FL_DATE", "AIRLINE_CODE", "FL_NUMBER", "ORIGIN", "ARR_DELAY", "CANCELLED", "DISTANCE"
             FROM flights {where_clause}
