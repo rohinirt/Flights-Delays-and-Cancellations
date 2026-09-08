@@ -205,18 +205,15 @@ def create_monthly_kpi_chart(data, x_col, y_col, bar_color="#0066CC"):
     )
     return fig
 
-def create_3d_arrivals_map_all(conn, map_airline_filter=None):
-    where_clause = "WHERE \"DEST\" = 'ORD'"
-    params = []
-    if map_airline_filter and map_airline_filter != "All Airlines":
-        where_clause += " AND \"AIRLINE_CODE\" = ?"
-        params.append(map_airline_filter)
-
-    origins_df = conn.execute(f"""
+def create_3d_arrivals_map_all(conn):
+    # Fixed query targeting all inbound flights to ORD regardless of airline
+    origins_df = conn.execute("""
         SELECT "ORIGIN", COUNT(*) AS flight_count
-        FROM flights {where_clause}
-        GROUP BY "ORIGIN" ORDER BY flight_count DESC
-    """, params).df()
+        FROM flights 
+        WHERE "DEST" = 'ORD'
+        GROUP BY "ORIGIN" 
+        ORDER BY flight_count DESC
+    """).df()
 
     airport_coords = load_airport_coordinates()
     ord_lat, ord_lon = airport_coords['ORD']
@@ -492,7 +489,7 @@ if page == "Arrivals Intelligence":
     with col_right:
         with st.container(border=True):
             map_airline = st.selectbox("Filter Map by Airline:", ["All Airlines"] + airlines)
-            st.plotly_chart(create_3d_arrivals_map_all(conn, map_airline), use_container_width=True)
+            st.plotly_chart(create_3d_arrivals_map_all(conn), use_container_width=True)
 
         with st.container(border=True):
             # REPLACED: Option 1 Parallel Categories Chart
