@@ -416,41 +416,58 @@ def render_flight_card_clean(row, is_delayed=False, mode="ARRIVALS"):
     </div>
     """, unsafe_allow_html=True)
 
-# Machine Learning Engine Setup
+# Machine Learning Engine Setup (Protected from crashes)
 @st.cache_resource
-def train_delay_prediction_model(conn):
-    """Trains a Machine Learning model using scikit-learn for delay classification."""
+def train_delay_prediction_model(_conn):
+    """Trains a Machine Learning model using scikit-learn with robust data sanitization."""
     try:
-        df = conn.execute("""
+        cols_df = _conn.execute("DESCRIBE flights").df()
+        cols = [c.upper() for c in cols_df['column_name'].tolist()]
+        
+        air_col = 'AIRLINE_CODE' if 'AIRLINE_CODE' in cols else ('AIRLINE' if 'AIRLINE' in cols else 'OP_UNIQUE_CARRIER')
+        dep_col = 'DEP_DELAY' if 'DEP_DELAY' in cols else ('ARR_DELAY' if 'ARR_DELAY' in cols else None)
+
+        if not dep_col or air_col not in cols:
+            return None, None, [], []
+
+        df = _conn.execute(f"""
             SELECT 
-                "AIRLINE_CODE", 
+                "{air_col}" AS AIRLINE_CODE, 
                 "ORIGIN", 
                 "DEST",
                 MONTH(TRY_CAST(CAST("FL_DATE" AS VARCHAR) AS DATE)) AS month,
-                CAST("CRS_DEP_TIME" / 100 AS INT) AS dep_hour,
-                "DISTANCE",
-                CASE WHEN "DEP_DELAY" > 15 THEN 1 ELSE 0 END AS is_delayed
+                CAST(COALESCE("CRS_DEP_TIME", 1200) / 100 AS INT) AS dep_hour,
+                COALESCE("DISTANCE", 500) AS DISTANCE,
+                CASE WHEN "{dep_col}" > 15 THEN 1 ELSE 0 END AS is_delayed
             FROM flights 
-            WHERE "DEP_DELAY" IS NOT NULL AND "AIRLINE_CODE" IS NOT NULL
-            LIMIT 60000
+            WHERE "{dep_col}" IS NOT NULL AND "{air_col}" IS NOT NULL
+            LIMIT 50000
         """).df()
 
-        if df.empty:
-            return None, None, None, None
+        df = df.dropna(subset=['AIRLINE_CODE', 'ORIGIN', 'DEST'])
+        if df.empty or len(df) < 50:
+            return None, None, [], []
+
+        df['AIRLINE_CODE'] = df['AIRLINE_CODE'].astype(str)
+        df['ORIGIN'] = df['ORIGIN'].astype(str)
+        df['DEST'] = df['DEST'].astype(str)
+        df['month'] = df['month'].fillna(6).astype(int)
+        df['dep_hour'] = df['dep_hour'].fillna(12).astype(int)
+        df['DISTANCE'] = df['DISTANCE'].fillna(500).astype(float)
 
         X = df[['AIRLINE_CODE', 'ORIGIN', 'DEST', 'month', 'dep_hour', 'DISTANCE']]
-        y = df['is_delayed']
+        y = df['is_delayed'].values
 
         encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
         cat_encoded = encoder.fit_transform(X[['AIRLINE_CODE', 'ORIGIN', 'DEST']])
         num_features = X[['month', 'dep_hour', 'DISTANCE']].values
         X_final = np.hstack((cat_encoded, num_features))
 
-        model = RandomForestClassifier(n_estimators=40, max_depth=10, random_state=42)
+        model = RandomForestClassifier(n_estimators=30, max_depth=8, random_state=42)
         model.fit(X_final, y)
 
-        origins = sorted(df['ORIGIN'].dropna().unique().tolist())
-        dests = sorted(df['DEST'].dropna().unique().tolist())
+        origins = sorted(df['ORIGIN'].unique().tolist())
+        dests = sorted(df['DEST'].unique().tolist())
 
         return model, encoder, origins, dests
     except Exception:
@@ -469,7 +486,7 @@ try:
     cols_df = conn.execute("DESCRIBE flights").df()
     cols = [c.upper() for c in cols_df['column_name'].tolist()]
     airline_col_name = 'AIRLINE_CODE' if 'AIRLINE_CODE' in cols else ('AIRLINE' if 'AIRLINE' in cols else 'OP_UNIQUE_CARRIER')
-    airlines = conn.execute(f'SELECT DISTINCT "{airline_col_name}" FROM flights WHERE "{airline_col_name}" IS NOT NULL ORDER BY 1').df().iloc[:, 0].dropna().tolist()
+    airlines = conn.execute(f'SELECT DISTINCT "{airline_col_name}" FROM flights WHERE "{airline_col_name}" IS NOT NULL ORDER BY 1').df().iloc[:, 0].dropna().astype(str).tolist()
 except Exception:
     airlines = []
 
@@ -766,49 +783,58 @@ elif page == "🔮 Delay Predictor":
 
     model, encoder, origins_list, dests_list = train_delay_prediction_model(conn)
 
-    if not model:
-        st.warning("Insufficient data available to train Machine Learning model.")
+    if not model or not encoder:
+        st.warning("Prediction model requires sufficient historical data. Please ensure 'flights_2022.csv' contains valid records.")
     else:
         with st.container(border=True):
             st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 12px;'>✈️ Configure Flight Parameters</div>", unsafe_allow_html=True)
             p1, p2, p3 = st.columns(3)
+            
+            airline_opts = airlines if airlines else list(AIRLINE_NAMES.keys())
+            orig_opts = origins_list if origins_list else ['ORD', 'LAX', 'JFK', 'DFW']
+            dest_opts = dests_list if dests_list else ['ORD', 'LAX', 'JFK', 'DFW']
+
             with p1:
-                input_airline = st.selectbox("Select Airline", options=airlines if airlines else list(AIRLINE_NAMES.keys()), format_func=lambda x: f"{x} - {AIRLINE_NAMES.get(str(x), 'Carrier')}")
+                input_airline = st.selectbox("Select Airline", options=airline_opts, format_func=lambda x: f"{x} - {AIRLINE_NAMES.get(str(x), 'Carrier')}")
                 input_month = st.slider("Flight Month", 1, 12, 6)
             with p2:
-                input_origin = st.selectbox("Origin Airport", options=origins_list if origins_list else ['ORD', 'LAX', 'JFK', 'DFW'])
+                input_origin = st.selectbox("Origin Airport", options=orig_opts)
                 input_hour = st.slider("Scheduled Departure Hour (24h)", 0, 23, 14)
             with p3:
-                input_dest = st.selectbox("Destination Airport", options=dests_list if dests_list else ['ORD', 'LAX', 'JFK', 'DFW'])
+                input_dest = st.selectbox("Destination Airport", options=dest_opts)
                 input_dist = st.number_input("Route Distance (miles)", min_value=100, max_value=5000, value=800, step=50)
 
             run_predict = st.button("Predict Delay Risk Probability", type="primary", use_container_width=True)
 
         if run_predict:
-            cat_encoded = encoder.transform([[input_airline, input_origin, input_dest]])
-            num_features = np.array([[input_month, input_hour, input_dist]])
-            full_input = np.hstack((cat_encoded, num_features))
+            try:
+                cat_input = pd.DataFrame([[str(input_airline), str(input_origin), str(input_dest)]], columns=['AIRLINE_CODE', 'ORIGIN', 'DEST'])
+                cat_encoded = encoder.transform(cat_input)
+                num_features = np.array([[int(input_month), int(input_hour), float(input_dist)]])
+                full_input = np.hstack((cat_encoded, num_features))
 
-            prob_delay = model.predict_proba(full_input)[0][1] * 100
-            is_high = prob_delay >= 35.0
+                prob_delay = model.predict_proba(full_input)[0][1] * 100
+                is_high = prob_delay >= 35.0
 
-            st.markdown("---")
-            m1, m2 = st.columns([1, 2])
-            with m1:
-                with st.container(border=True):
-                    if is_high:
-                        st.error(f"⚠️ **High Delay Risk: {prob_delay:.1f}%**")
-                    else:
-                        st.success(f"✅ **Low Delay Risk: {prob_delay:.1f}%**")
-                    st.progress(int(prob_delay))
+                st.markdown("---")
+                m1, m2 = st.columns([1, 2])
+                with m1:
+                    with st.container(border=True):
+                        if is_high:
+                            st.error(f"⚠️ **High Delay Risk: {prob_delay:.1f}%**")
+                        else:
+                            st.success(f"✅ **Low Delay Risk: {prob_delay:.1f}%**")
+                        st.progress(int(prob_delay))
 
-            with m2:
-                with st.container(border=True):
-                    st.markdown("##### 💡 Predictive Insights & Context")
-                    if is_high:
-                        st.write(f"The model detected operational congestion markers for **{input_airline}** running route **{input_origin} ➔ {input_dest}** at **{input_hour}:00** during **Month {input_month}**.")
-                    else:
-                        st.write(f"The scheduled departure window at **{input_hour}:00** for **{input_airline}** on route **{input_origin} ➔ {input_dest}** shows optimal historical performance.")
+                with m2:
+                    with st.container(border=True):
+                        st.markdown("##### 💡 Predictive Insights & Context")
+                        if is_high:
+                            st.write(f"The model detected operational congestion markers for **{input_airline}** running route **{input_origin} ➔ {input_dest}** at **{input_hour}:00** during **Month {input_month}**.")
+                        else:
+                            st.write(f"The scheduled departure window at **{input_hour}:00** for **{input_airline}** on route **{input_origin} ➔ {input_dest}** shows optimal historical performance.")
+            except Exception as e:
+                st.error(f"Prediction failed: {str(e)}")
 
 # ==================== FLIGHT DEEP-DIVE PAGE ====================
 elif page == "Flight Deep-Dive":
