@@ -91,20 +91,10 @@ st.markdown("""
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #FFFFFF !important;
         border-radius: 8px !important;
-        border: none !important;
-        padding: 8px 12px !important;
-        box-shadow: none !important;
-        margin-bottom: 6px !important;
-    }
-
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stSelectbox"]),
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stMultiSelect"]),
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stSegmentedControl"]),
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stDateInput"]),
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stSlider"]),
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stNumberInput"]) {
         border: 1px solid #CBD5E1 !important;
-        box-shadow: 0 1px 3px rgba(15,23,42,0.03) !important;
+        padding: 8px 12px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03) !important;
+        margin-bottom: 6px !important;
     }
 
     /* Plain (non-bordered) columns, e.g. the KPI strip, still get a light card
@@ -112,15 +102,10 @@ st.markdown("""
        container, so nothing is ever double-boxed. */
     div[data-testid="stColumn"] > div:not(:has(div[data-testid="stVerticalBlockBorderWrapper"])) {
         background-color: #FFFFFF !important;
-        border: none !important;
+        border: 1px solid #E2E8F0 !important;
         border-radius: 10px !important;
         padding: 6px 6px 2px 6px !important;
-        box-shadow: none !important;
-    }
-
-    .flight-clean-card {
-        border: none !important;
-        box-shadow: none !important;
+        box-shadow: 0 1px 3px rgba(15,23,42,0.05) !important;
     }
 
     div[data-testid="stSegmentedControl"] {
@@ -214,9 +199,9 @@ def apply_white_chart_theme(fig):
         font=dict(color="#0f172a", family="sans-serif"),
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#FFFFFF",
-        title=dict(text="", font=dict(color="#0f172a", size=14, weight="bold")),
-        xaxis=dict(title=dict(text="", font=dict(color="#0f172a")), tickfont=dict(color="#0f172a"), gridcolor="#f1f5f9"),
-        yaxis=dict(title=dict(text="", font=dict(color="#0f172a")), tickfont=dict(color="#0f172a"), gridcolor="#f1f5f9"),
+        title=dict(font=dict(color="#0f172a", size=14, weight="bold")),
+        xaxis=dict(title=dict(font=dict(color="#0f172a")), tickfont=dict(color="#0f172a"), gridcolor="#f1f5f9"),
+        yaxis=dict(title=dict(font=dict(color="#0f172a")), tickfont=dict(color="#0f172a"), gridcolor="#f1f5f9"),
         legend=dict(font=dict(color="#0f172a"))
     )
     return fig
@@ -1024,101 +1009,20 @@ elif page == "Flight Deep-Dive":
     with st.container(border=True):
         st.markdown("<div style='font-weight:700;color:#0F172A;font-size:1rem;margin-bottom:8px;'>🎯 Flight Corridor</div>", unsafe_allow_html=True)
         rc1, rc2, rc3 = st.columns(3)
-
-        # Deep-Dive uses actual route pairs from the underlying flights table.
-        # The Arrivals/Departures pages are ORD-filtered, but this page is not.
-        route_scope = run_query(
-            conn,
-            'SELECT DISTINCT UPPER("ORIGIN") AS ORIGIN, UPPER("DEST") AS DEST '
-            'FROM flights '
-            'WHERE "FL_DATE" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE) '
-            'AND "ORIGIN" IS NOT NULL AND "DEST" IS NOT NULL '
-            'ORDER BY ORIGIN, DEST',
-            [str(start_date), str(end_date)]
-        )
-
-        if route_scope.empty:
-            st.info("No routes are available for the selected date range.")
-            st.stop()
-
-        all_origins = sorted(route_scope["ORIGIN"].astype(str).unique().tolist())
-
+        all_origins = run_query(conn, 'SELECT DISTINCT "ORIGIN" FROM flights WHERE "ORIGIN" IS NOT NULL ORDER BY 1').iloc[:,0].tolist()
+        all_dests = run_query(conn, 'SELECT DISTINCT "DEST" FROM flights WHERE "DEST" IS NOT NULL ORDER BY 1').iloc[:,0].tolist()
         with rc1:
-            default_origin = "ORD" if "ORD" in all_origins else all_origins[0]
-            selected_orig = st.selectbox(
-                "Origin Airport",
-                all_origins,
-                index=all_origins.index(default_origin),
-                format_func=lambda x: f"{x} — {AIRPORT_CITY_NAMES.get(x, x)}"
-            )
-
-        available_dests = sorted(
-            route_scope.loc[
-                route_scope["ORIGIN"].astype(str) == str(selected_orig),
-                "DEST"
-            ].astype(str).unique().tolist()
-        )
-
+            selected_orig=st.selectbox("Origin Airport",all_origins,index=all_origins.index('ORD') if 'ORD' in all_origins else 0,format_func=lambda x:f"{x} — {AIRPORT_CITY_NAMES.get(x,x)}")
         with rc2:
-            selected_dest = st.selectbox(
-                "Destination Airport",
-                available_dests,
-                index=(
-                    available_dests.index("LAX")
-                    if "LAX" in available_dests else 0
-                ),
-                format_func=lambda x: f"{x} — {AIRPORT_CITY_NAMES.get(x, x)}"
-            )
-
-        # Only show airlines that actually operate the selected route.
-        airline_route_df = run_query(
-            conn,
-            f'SELECT DISTINCT "{airline_col_name}" AS AIRLINE '
-            'FROM flights '
-            'WHERE UPPER("ORIGIN") = ? AND UPPER("DEST") = ? '
-            'AND "FL_DATE" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE) '
-            f'AND "{airline_col_name}" IS NOT NULL '
-            f'ORDER BY "{airline_col_name}"',
-            [
-                str(selected_orig).upper(),
-                str(selected_dest).upper(),
-                str(start_date),
-                str(end_date)
-            ]
-        )
-        route_airlines = (
-            airline_route_df["AIRLINE"].dropna().astype(str).tolist()
-            if not airline_route_df.empty else []
-        )
-
+            selected_dest=st.selectbox("Destination Airport",all_dests,index=all_dests.index('LAX') if 'LAX' in all_dests else 0,format_func=lambda x:f"{x} — {AIRPORT_CITY_NAMES.get(x,x)}")
         with rc3:
-            deep_airline = st.selectbox(
-                "Airline",
-                ["All Airlines"] + route_airlines,
-                format_func=lambda x: (
-                    "All Airlines"
-                    if x == "All Airlines"
-                    else f"{x} — {AIRLINE_NAMES.get(str(x), 'Carrier')}"
-                )
-            )
+            deep_airline=st.selectbox("Airline",["All Airlines"]+(airlines if airlines else []),format_func=lambda x:"All Airlines" if x=="All Airlines" else f"{x} — {AIRLINE_NAMES.get(str(x),'Carrier')}")
 
-    route_sql = (
-        'SELECT * FROM flights '
-        'WHERE UPPER("ORIGIN") = ? AND UPPER("DEST") = ? '
-        'AND "FL_DATE" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)'
-    )
-    route_params = [
-        selected_orig.upper(),
-        selected_dest.upper(),
-        str(start_date),
-        str(end_date)
-    ]
-
-    if deep_airline != "All Airlines":
-        route_sql += f' AND "{airline_col_name}" = ?'
-        route_params.append(deep_airline)
-
-    route_df = run_query(conn, route_sql, route_params)
+    route_sql="SELECT * FROM flights WHERE UPPER(\"ORIGIN\")=? AND UPPER(\"DEST\")=? AND \"FL_DATE\" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)"
+    route_params=[selected_orig.upper(),selected_dest.upper(),str(start_date),str(end_date)]
+    if deep_airline!="All Airlines":
+        route_sql+=f' AND "{airline_col_name}"=?'; route_params.append(deep_airline)
+    route_df=run_query(conn,route_sql,route_params)
 
     if route_df.empty:
         st.warning(f"No direct flight records found for {selected_orig} ➔ {selected_dest} in the selected date range.")
@@ -1191,12 +1095,12 @@ elif page == "Flight Deep-Dive":
             st.markdown("### 🧠 Advanced Route Risk Analytics")
             r1,r2,r3=st.columns(3)
             with r1:
-                rh=route_df.groupby("DEP_HOUR").agg(Flights=("DEP_HOUR","size"),DelayRate=("ARR_DELAY_NUM",lambda x:(x>15).mean()*100)).reset_index(); prior=max(20,int(total*.1)); base=(route_df.ARR_DELAY_NUM>15).mean()*100; rh["SmoothedRisk"]=(rh.Flights*rh.DelayRate+prior*base)/(rh.Flights+prior); fig=px.bar(rh.sort_values("SmoothedRisk"),x="SmoothedRisk",y="DEP_HOUR",orientation="h",text="SmoothedRisk"); fig.update_traces(marker_color="#0066CC",texttemplate="%{text:.1f}%",textposition="outside",width=.64); fig=apply_white_chart_theme(fig); fig.update_layout(title_text="",height=280,margin=dict(l=10,r=35,t=10,b=10),xaxis_title="Smoothed Delay Risk %",yaxis_title="Hour"); st.plotly_chart(fig,width='stretch')
+                rh=route_df.groupby("DEP_HOUR").agg(Flights=("DEP_HOUR","size"),DelayRate=("ARR_DELAY_NUM",lambda x:(x>15).mean()*100)).reset_index(); prior=max(20,int(total*.1)); base=(route_df.ARR_DELAY_NUM>15).mean()*100; rh["SmoothedRisk"]=(rh.Flights*rh.DelayRate+prior*base)/(rh.Flights+prior); fig=px.bar(rh.sort_values("SmoothedRisk"),x="SmoothedRisk",y="DEP_HOUR",orientation="h",text="SmoothedRisk"); fig.update_traces(marker_color="#0066CC",texttemplate="%{text:.1f}%",textposition="outside",width=.64); fig=apply_white_chart_theme(fig); fig.update_layout(height=280,margin=dict(l=10,r=35,t=10,b=10),xaxis_title="Smoothed Delay Risk %",yaxis_title="Hour"); st.plotly_chart(fig,width='stretch')
             with r2:
                 ci=cs.copy(); z=1.96; ci["p"]=ci.OnTime/100; ci["se"]=np.sqrt((ci.p*(1-ci.p))/ci.Flights.clip(lower=1)); ci["Lower"]=(ci.p-z*ci.se).clip(lower=0)*100; ci["Upper"]=(ci.p+z*ci.se).clip(upper=1)*100; fig=go.Figure()
                 for _,row in ci.sort_values("OnTime").iterrows():
                     fig.add_trace(go.Scatter(x=[row.Lower,row.Upper],y=[row.Carrier,row.Carrier],mode="lines",line=dict(color="#94A3B8",width=6),showlegend=False)); fig.add_trace(go.Scatter(x=[row.OnTime],y=[row.Carrier],mode="markers",marker=dict(color="#0066CC",size=9),showlegend=False))
-                fig=apply_white_chart_theme(fig); fig.update_layout(title_text="",height=280,margin=dict(l=10,r=10,t=10,b=10),xaxis_title="On-Time Arrival %",yaxis_title=""); st.plotly_chart(fig,width='stretch')
+                fig=apply_white_chart_theme(fig); fig.update_layout(height=280,margin=dict(l=10,r=10,t=10,b=10),xaxis_title="On-Time Arrival %",yaxis_title=""); st.plotly_chart(fig,width='stretch')
             with r3:
                 pdly=route_df.loc[route_df.ARR_DELAY_NUM>0,"ARR_DELAY_NUM"].sort_values(ascending=False).reset_index(drop=True)
                 if len(pdly):
