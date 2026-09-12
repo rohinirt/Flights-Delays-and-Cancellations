@@ -7,6 +7,8 @@ import urllib.request
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, f1_score
 
 # Page Configuration
 st.set_page_config(
@@ -15,6 +17,23 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+def get_airline_col(columns):
+    """Single place that decides which column holds the airline/carrier code,
+    so every chart and query agrees on the same column across the app."""
+    upper_cols = [c.upper() for c in columns]
+    for candidate in ['AIRLINE_CODE', 'AIRLINE', 'OP_UNIQUE_CARRIER', 'CARRIER']:
+        if candidate in upper_cols:
+            return candidate
+    return upper_cols[0] if upper_cols else 'AIRLINE_CODE'
+
+@st.cache_data(show_spinner=False)
+def run_query(_conn, sql, params=None):
+    """Cached wrapper around conn.execute(...).df(). Leading underscore on
+    _conn tells Streamlit not to try to hash the DuckDB connection; the SQL
+    text + params are the real cache key, so repeated widget interactions
+    that don't change the query skip re-hitting DuckDB entirely."""
+    return _conn.execute(sql, list(params) if params else []).df()
 
 def safe_int(val, default=0):
     if pd.isna(val) or val is None:
@@ -208,15 +227,18 @@ def create_monthly_kpi_chart(data, x_col, y_col, bar_color="#0066CC"):
     )
     return fig
 
-def create_3d_flight_map(conn, mode="ARRIVALS"):
+@st.cache_data(show_spinner=False)
+def create_3d_flight_map(_conn, mode="ARRIVALS", start_date=None, end_date=None):
+    date_filter = ' AND "FL_DATE" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)' if start_date and end_date else ""
+    date_params = [str(start_date), str(end_date)] if start_date and end_date else []
     if mode == "ARRIVALS":
-        query = "SELECT \"ORIGIN\" AS airport, COUNT(*) AS flight_count FROM flights WHERE UPPER(\"DEST\") = 'ORD' GROUP BY \"ORIGIN\" ORDER BY flight_count DESC"
+        query = f"SELECT \"ORIGIN\" AS airport, COUNT(*) AS flight_count FROM flights WHERE UPPER(\"DEST\") = 'ORD'{date_filter} GROUP BY \"ORIGIN\" ORDER BY flight_count DESC"
         title = "🌐 Dynamic Inbound Route Globe"
     else:
-        query = "SELECT \"DEST\" AS airport, COUNT(*) AS flight_count FROM flights WHERE UPPER(\"ORIGIN\") = 'ORD' GROUP BY \"DEST\" ORDER BY flight_count DESC"
+        query = f"SELECT \"DEST\" AS airport, COUNT(*) AS flight_count FROM flights WHERE UPPER(\"ORIGIN\") = 'ORD'{date_filter} GROUP BY \"DEST\" ORDER BY flight_count DESC"
         title = "🌐 Dynamic Outbound Route Globe"
 
-    routes_df = conn.execute(query).df()
+    routes_df = run_query(_conn, query, date_params)
     airport_coords = load_airport_coordinates()
     ord_lat, ord_lon = airport_coords['ORD']
     fig = go.Figure()
@@ -254,12 +276,15 @@ def create_3d_flight_map(conn, mode="ARRIVALS"):
     )
     return fig
 
-def create_airline_connectivity_barchart(conn, mode="ARRIVALS"):
+@st.cache_data(show_spinner=False)
+def create_airline_connectivity_barchart(_conn, mode="ARRIVALS", start_date=None, end_date=None):
     try:
-        raw_df = conn.execute("SELECT * FROM flights LIMIT 10000").df()
+        date_filter = ' WHERE "FL_DATE" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)' if start_date and end_date else ""
+        date_params = [str(start_date), str(end_date)] if start_date and end_date else []
+        raw_df = run_query(_conn, f"SELECT * FROM flights{date_filter} LIMIT 10000", date_params)
         raw_df.columns = [c.upper() for c in raw_df.columns]
         
-        airline_col = 'AIRLINE_CODE' if 'AIRLINE_CODE' in raw_df.columns else ('AIRLINE' if 'AIRLINE' in raw_df.columns else None)
+        airline_col = get_airline_col(raw_df.columns) if any(c in raw_df.columns for c in ['AIRLINE_CODE', 'AIRLINE', 'OP_UNIQUE_CARRIER', 'CARRIER']) else None
         target_col = 'ORIGIN' if mode == "ARRIVALS" else 'DEST'
         filter_col = 'DEST' if mode == "ARRIVALS" else 'ORIGIN'
 
@@ -274,12 +299,16 @@ def create_airline_connectivity_barchart(conn, mode="ARRIVALS"):
             df = df.sort_values(by=['unique_routes', 'total_flights'], ascending=[False, False]).head(10)
         else:
             df = pd.DataFrame()
-    except Exception:
+        connectivity_error = None
+    except Exception as e:
         df = pd.DataFrame()
+        connectivity_error = str(e)
 
     if df.empty:
         fig = go.Figure()
-        fig.add_annotation(text="No connectivity data available", showarrow=False)
+        msg = f"Connectivity data unavailable: {connectivity_error}" if connectivity_error else "No connectivity data for the selected filters"
+        fig.add_annotation(text=msg, showarrow=False)
+        fig.update_layout(height=380, paper_bgcolor="#FFFFFF")
         return fig
 
     df['airline_name'] = df['airline'].apply(lambda x: f"{x} ({AIRLINE_NAMES.get(str(x), 'Carrier')})")
@@ -294,16 +323,17 @@ def create_airline_connectivity_barchart(conn, mode="ARRIVALS"):
     )
     return fig
 
-def create_airline_radar_chart(conn, selected_airline_code=None, mode="ARRIVALS"):
+@st.cache_data(show_spinner=False)
+def create_airline_radar_chart(_conn, selected_airline_code=None, mode="ARRIVALS", start_date=None, end_date=None):
     try:
-        df_raw = conn.execute("SELECT * FROM flights").df()
+        date_filter = ' WHERE "FL_DATE" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)' if start_date and end_date else ""
+        date_params = [str(start_date), str(end_date)] if start_date and end_date else []
+        df_raw = run_query(_conn, f"SELECT * FROM flights{date_filter}", date_params)
         df_raw.columns = [c.upper() for c in df_raw.columns]
 
-        airline_col = None
-        for col in ['AIRLINE_CODE', 'AIRLINE', 'OP_UNIQUE_CARRIER', 'CARRIER']:
-            if col in df_raw.columns:
-                airline_col = col
-                break
+        airline_col = get_airline_col(df_raw.columns) if any(
+            c in df_raw.columns for c in ['AIRLINE_CODE', 'AIRLINE', 'OP_UNIQUE_CARRIER', 'CARRIER']
+        ) else None
 
         if not airline_col:
             fig = go.Figure()
@@ -428,7 +458,7 @@ def train_enhanced_prediction_models(_conn):
         dep_col = 'DEP_DELAY' if 'DEP_DELAY' in cols else ('ARR_DELAY' if 'ARR_DELAY' in cols else None)
 
         if not dep_col or air_col not in cols:
-            return None, None, None, [], []
+            return None, None, None, [], [], None
 
         df = _conn.execute(f"""
             SELECT 
@@ -447,7 +477,7 @@ def train_enhanced_prediction_models(_conn):
 
         df = df.dropna(subset=['AIRLINE_CODE', 'ORIGIN', 'DEST'])
         if df.empty or len(df) < 100:
-            return None, None, None, [], []
+            return None, None, None, [], [], None
 
         df['AIRLINE_CODE'] = df['AIRLINE_CODE'].astype(str)
         df['ORIGIN'] = df['ORIGIN'].astype(str)
@@ -475,20 +505,46 @@ def train_enhanced_prediction_models(_conn):
         num_features = X[['month', 'dep_hour', 'DISTANCE']].values
         X_final = np.hstack((cat_encoded, num_features))
 
-        # Train Multi-Class Severity Classifier
+        # Held-out split purely to report honest accuracy - the deployed
+        # model below is refit on ALL the data once we know how well it does.
+        X_train, X_test, ysev_train, ysev_test, ycan_train, ycan_test = train_test_split(
+            X_final, y_severity, y_cancelled, test_size=0.2, random_state=42,
+            stratify=y_severity
+        )
+
+        eval_severity_model = RandomForestClassifier(n_estimators=40, max_depth=9, random_state=42)
+        eval_severity_model.fit(X_train, ysev_train)
+        sev_pred = eval_severity_model.predict(X_test)
+        severity_accuracy = accuracy_score(ysev_test, sev_pred)
+        severity_f1 = f1_score(ysev_test, sev_pred, average='macro', zero_division=0)
+
+        eval_cancel_model = RandomForestClassifier(n_estimators=30, max_depth=7, random_state=42)
+        eval_cancel_model.fit(X_train, ycan_train)
+        can_pred = eval_cancel_model.predict(X_test)
+        cancel_accuracy = accuracy_score(ycan_test, can_pred)
+        cancel_f1 = f1_score(ycan_test, can_pred, average='binary', zero_division=0)
+
+        metrics = {
+            'severity_accuracy': severity_accuracy, 'severity_f1': severity_f1,
+            'cancel_accuracy': cancel_accuracy, 'cancel_f1': cancel_f1,
+            'n_train': len(X_train), 'n_test': len(X_test),
+            'cancel_base_rate': float(y_cancelled.mean()),
+        }
+
+        # Train Multi-Class Severity Classifier (final, on all available data)
         severity_model = RandomForestClassifier(n_estimators=40, max_depth=9, random_state=42)
         severity_model.fit(X_final, y_severity)
 
-        # Train Binary Cancellation Risk Model
+        # Train Binary Cancellation Risk Model (final, on all available data)
         cancel_model = RandomForestClassifier(n_estimators=30, max_depth=7, random_state=42)
         cancel_model.fit(X_final, y_cancelled)
 
         origins = sorted(df['ORIGIN'].unique().tolist())
         dests = sorted(df['DEST'].unique().tolist())
 
-        return severity_model, cancel_model, encoder, origins, dests
-    except Exception:
-        return None, None, None, [], []
+        return severity_model, cancel_model, encoder, origins, dests, metrics
+    except Exception as e:
+        return None, None, None, [], [], {'error': str(e)}
 
 # Sidebar Controls
 st.sidebar.title("✈️ ORD Analytics")
@@ -502,20 +558,45 @@ st.sidebar.subheader("Filter Data")
 try:
     cols_df = conn.execute("DESCRIBE flights").df()
     cols = [c.upper() for c in cols_df['column_name'].tolist()]
-    airline_col_name = 'AIRLINE_CODE' if 'AIRLINE_CODE' in cols else ('AIRLINE' if 'AIRLINE' in cols else 'OP_UNIQUE_CARRIER')
-    airlines = conn.execute(f'SELECT DISTINCT "{airline_col_name}" FROM flights WHERE "{airline_col_name}" IS NOT NULL ORDER BY 1').df().iloc[:, 0].dropna().astype(str).tolist()
-except Exception:
+    airline_col_name = get_airline_col(cols)
+    airlines = run_query(conn, f'SELECT DISTINCT "{airline_col_name}" FROM flights WHERE "{airline_col_name}" IS NOT NULL ORDER BY 1').iloc[:, 0].dropna().astype(str).tolist()
+except Exception as e:
+    # airline_col_name is used throughout the rest of the app, so it must
+    # always end up with a value - falling back to a sane default here
+    # avoids a NameError crash later on if this lookup ever fails.
+    airline_col_name = 'AIRLINE_CODE'
     airlines = []
+    st.sidebar.warning(f"Couldn't load the airline list ({e}). Airline filtering is disabled for this session.")
 
 selected_airline = st.sidebar.multiselect("Select Airline", options=airlines, default=[], help="Leave empty to include all airlines")
 
 if selected_airline:
     st.sidebar.caption(f"Filtering {len(selected_airline)} of {len(airlines)} airlines")
 
+# Date range filter, bounded by whatever's actually in the CSV
+try:
+    date_bounds = run_query(conn, 'SELECT MIN("FL_DATE") AS min_d, MAX("FL_DATE") AS max_d FROM flights')
+    min_date = pd.to_datetime(date_bounds['min_d'].iloc[0]).date()
+    max_date = pd.to_datetime(date_bounds['max_d'].iloc[0]).date()
+except Exception:
+    min_date, max_date = pd.Timestamp("2022-01-01").date(), pd.Timestamp("2022-12-31").date()
+
+date_range = st.sidebar.date_input(
+    "Date Range", value=(min_date, max_date), min_value=min_date, max_value=max_date,
+    help="Applies to every page and chart"
+)
+if isinstance(date_range, tuple) and len(date_range) == 2:
+    start_date, end_date = date_range
+else:
+    start_date, end_date = min_date, max_date
+
+if (start_date, end_date) != (min_date, max_date):
+    st.sidebar.caption(f"📅 {start_date} → {end_date}")
+
 # Base SQL Filters
-where_arr = "WHERE UPPER(\"DEST\") = 'ORD'"
-where_dep = "WHERE UPPER(\"ORIGIN\") = 'ORD'"
-params_arr, params_dep = [], []
+where_arr = "WHERE UPPER(\"DEST\") = 'ORD' AND \"FL_DATE\" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)"
+where_dep = "WHERE UPPER(\"ORIGIN\") = 'ORD' AND \"FL_DATE\" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)"
+params_arr, params_dep = [str(start_date), str(end_date)], [str(start_date), str(end_date)]
 
 if selected_airline:
     placeholders = ", ".join(["?"] * len(selected_airline))
@@ -529,21 +610,21 @@ if page == "Arrivals Intelligence":
     st.title("🛬 ORD Arrivals Intelligence")
     st.caption("2022 Operational Performance & Inbound Route Analytics")
     
-    kpi_df = conn.execute(f"""
+    kpi_df = run_query(conn, f"""
         SELECT COUNT(*) AS total_flights,
             AVG(CASE WHEN "ARR_DELAY" <= 15 THEN 1 ELSE 0 END) * 100 AS on_time_pct,
             AVG("ARR_DELAY") AS avg_delay, SUM("CANCELLED") AS total_cancelled, SUM("DIVERTED") AS total_diverted
         FROM flights {where_arr}
-    """, params_arr).df()
+    """, params_arr)
     total_flights, on_time_pct, avg_delay, total_cancelled, total_diverted = kpi_df.iloc[0]
 
-    monthly_trend = conn.execute(f"""
+    monthly_trend = run_query(conn, f"""
         SELECT MONTH(TRY_CAST(CAST("FL_DATE" AS VARCHAR) AS DATE)) AS month,
             COUNT(*) AS flights, AVG("ARR_DELAY") AS delay,
             AVG(CASE WHEN "ARR_DELAY" <= 15 THEN 1 ELSE 0 END) * 100 AS on_time,
             SUM("CANCELLED") AS cancelled, SUM("DIVERTED") AS diverted
         FROM flights {where_arr} GROUP BY month HAVING month IS NOT NULL ORDER BY month
-    """, params_arr).df()
+    """, params_arr)
 
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
@@ -561,6 +642,7 @@ if page == "Arrivals Intelligence":
     with c5:
         st.markdown(f"<div style='text-align: center;'><div style='font-size: 0.72rem; font-weight: 700; color: #475569;'>DIVERTED</div><div style='font-size: 1.3rem; font-weight: 800; color: #0A192F;'>{safe_int(total_diverted):,}</div></div>", unsafe_allow_html=True)
         st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'diverted', '#38BDF8'), width='stretch', config={'displayModeBar': False})
+    st.caption("Sparklines show the monthly trend across the selected date range. \"On-Time\" follows the DOT convention: arrival delay ≤ 15 minutes.")
 
     col_left, col_right = st.columns([1, 1])
     with col_left:
@@ -574,7 +656,7 @@ if page == "Arrivals Intelligence":
             }
             sql_val, sql_ord = measure_map[measure]
 
-            origins_df = conn.execute(f'SELECT "ORIGIN" AS code, {sql_val} AS val FROM flights {where_arr} GROUP BY code ORDER BY val {sql_ord} LIMIT 10', params_arr).df()
+            origins_df = run_query(conn, f'SELECT "ORIGIN" AS code, {sql_val} AS val FROM flights {where_arr} GROUP BY code ORDER BY val {sql_ord} LIMIT 10', params_arr)
             origins_df['full_label'] = origins_df['code'].apply(lambda x: f"{x} ({AIRPORT_CITY_NAMES.get(x, 'Origin')})")
 
             fig_orig = px.bar(origins_df, y='full_label', x='val', orientation='h', title=f"Top 10 Origin Destinations by {measure}", text_auto='.1f' if 'Delay' in measure or 'Time' in measure else True)
@@ -583,7 +665,7 @@ if page == "Arrivals Intelligence":
             fig_orig.update_layout(yaxis=dict(autorange="reversed", title=""), xaxis=dict(title=measure), margin=dict(l=10, r=25, t=35, b=10), height=320)
             st.plotly_chart(fig_orig, width='stretch')
 
-            airlines_df = conn.execute(f'SELECT "{airline_col_name}" AS code, {sql_val} AS val FROM flights {where_arr} GROUP BY code ORDER BY val {sql_ord} LIMIT 10', params_arr).df()
+            airlines_df = run_query(conn, f'SELECT "{airline_col_name}" AS code, {sql_val} AS val FROM flights {where_arr} GROUP BY code ORDER BY val {sql_ord} LIMIT 10', params_arr)
             airlines_df['full_label'] = airlines_df['code'].apply(lambda x: f"{x} ({AIRLINE_NAMES.get(str(x), 'Carrier')})")
 
             fig_air = px.bar(airlines_df, y='full_label', x='val', orientation='h', title=f"Top 10 Airlines by {measure}", text_auto='.1f' if 'Delay' in measure or 'Time' in measure else True)
@@ -594,22 +676,22 @@ if page == "Arrivals Intelligence":
 
     with col_right:
         with st.container(border=True):
-            st.plotly_chart(create_3d_flight_map(conn, mode="ARRIVALS"), width='stretch')
+            st.plotly_chart(create_3d_flight_map(conn, mode="ARRIVALS", start_date=start_date, end_date=end_date), width='stretch')
         with st.container(border=True):
-            st.plotly_chart(create_airline_connectivity_barchart(conn, mode="ARRIVALS"), width='stretch')
+            st.plotly_chart(create_airline_connectivity_barchart(conn, mode="ARRIVALS", start_date=start_date, end_date=end_date), width='stretch')
 
     col_longest, col_delayed = st.columns(2)
     with col_longest:
         with st.container(border=True):
             st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>✈️ Top 5 Longest Inbound Routes</div>", unsafe_allow_html=True)
-            longest_df = conn.execute(f'SELECT "FL_NUMBER", "{airline_col_name}" AS AIRLINE_CODE, "ORIGIN", "FL_DATE", COALESCE("CRS_DEP_TIME", 0) AS crs_dep, COALESCE("ARR_TIME", 0) AS actual_arr, COALESCE("ELAPSED_TIME", 0) AS elapsed_time, COALESCE("ARR_DELAY", 0) AS delay_val FROM flights {where_arr} ORDER BY "ELAPSED_TIME" DESC LIMIT 5', params_arr).df()
+            longest_df = run_query(conn, f'SELECT "FL_NUMBER", "{airline_col_name}" AS AIRLINE_CODE, "ORIGIN", "FL_DATE", COALESCE("CRS_DEP_TIME", 0) AS crs_dep, COALESCE("ARR_TIME", 0) AS actual_arr, COALESCE("ELAPSED_TIME", 0) AS elapsed_time, COALESCE("ARR_DELAY", 0) AS delay_val FROM flights {where_arr} ORDER BY "ELAPSED_TIME" DESC LIMIT 5', params_arr)
             for _, row in longest_df.iterrows():
                 render_flight_card_clean(row, is_delayed=False, mode="ARRIVALS")
 
     with col_delayed:
         with st.container(border=True):
             st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>⚠️ Top 5 Most Delayed Inbound Flights</div>", unsafe_allow_html=True)
-            delayed_df = conn.execute(f'SELECT "FL_NUMBER", "{airline_col_name}" AS AIRLINE_CODE, "ORIGIN", "FL_DATE", COALESCE("CRS_DEP_TIME", 0) AS crs_dep, COALESCE("ARR_TIME", 0) AS actual_arr, COALESCE("ELAPSED_TIME", 0) AS elapsed_time, COALESCE("ARR_DELAY", 0) AS delay_val FROM flights {where_arr} ORDER BY "ARR_DELAY" DESC LIMIT 5', params_arr).df()
+            delayed_df = run_query(conn, f'SELECT "FL_NUMBER", "{airline_col_name}" AS AIRLINE_CODE, "ORIGIN", "FL_DATE", COALESCE("CRS_DEP_TIME", 0) AS crs_dep, COALESCE("ARR_TIME", 0) AS actual_arr, COALESCE("ELAPSED_TIME", 0) AS elapsed_time, COALESCE("ARR_DELAY", 0) AS delay_val FROM flights {where_arr} ORDER BY "ARR_DELAY" DESC LIMIT 5', params_arr)
             for _, row in delayed_df.iterrows():
                 render_flight_card_clean(row, is_delayed=True, mode="ARRIVALS")
 
@@ -619,11 +701,11 @@ if page == "Arrivals Intelligence":
             st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 6px;'>Arrival Volume Heatmap</div>", unsafe_allow_html=True)
             heat_dim = st.segmented_control("Heatmap Grouping Select", ["Month vs. Hour", "Day of Week vs. Hour"], default="Month vs. Hour", label_visibility="collapsed")
             if heat_dim == "Month vs. Hour":
-                heat_df = conn.execute(f'SELECT MONTH(TRY_CAST(CAST("FL_DATE" AS VARCHAR) AS DATE)) AS row_dim, CAST("CRS_ARR_TIME" / 100 AS INT) AS hour, COUNT(*) AS flights FROM flights {where_arr} GROUP BY row_dim, hour ORDER BY row_dim, hour', params_arr).df()
+                heat_df = run_query(conn, f'SELECT MONTH(TRY_CAST(CAST("FL_DATE" AS VARCHAR) AS DATE)) AS row_dim, CAST("CRS_ARR_TIME" / 100 AS INT) AS hour, COUNT(*) AS flights FROM flights {where_arr} GROUP BY row_dim, hour ORDER BY row_dim, hour', params_arr)
                 heat_df['row_dim'] = heat_df['row_dim'].map({1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'May', 6:'Jun', 7:'Jul', 8:'Aug', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dec'})
                 y_label = "Month"
             else:
-                heat_df = conn.execute(f'SELECT DAYOFWEEK(TRY_CAST(CAST("FL_DATE" AS VARCHAR) AS DATE)) AS row_dim, CAST("CRS_ARR_TIME" / 100 AS INT) AS hour, COUNT(*) AS flights FROM flights {where_arr} GROUP BY row_dim, hour ORDER BY row_dim, hour', params_arr).df()
+                heat_df = run_query(conn, f'SELECT DAYOFWEEK(TRY_CAST(CAST("FL_DATE" AS VARCHAR) AS DATE)) AS row_dim, CAST("CRS_ARR_TIME" / 100 AS INT) AS hour, COUNT(*) AS flights FROM flights {where_arr} GROUP BY row_dim, hour ORDER BY row_dim, hour', params_arr)
                 heat_df['row_dim'] = heat_df['row_dim'].map({0:'Sun', 1:'Mon', 2:'Tue', 3:'Wed', 4:'Thu', 5:'Fri', 6:'Sat'})
                 y_label = "Day of Week"
 
@@ -636,7 +718,7 @@ if page == "Arrivals Intelligence":
     with c_delay:
         with st.container(border=True):
             st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 6px;'>Arrival Delay Drivers</div>", unsafe_allow_html=True)
-            delay_df = conn.execute(f'SELECT AVG("DELAY_DUE_CARRIER") AS Carrier, AVG("DELAY_DUE_WEATHER") AS Weather, AVG("DELAY_DUE_NAS") AS NAS, AVG("DELAY_DUE_SECURITY") AS Security, AVG("DELAY_DUE_LATE_AIRCRAFT") AS "Late Aircraft" FROM flights {where_arr}', params_arr).df()
+            delay_df = run_query(conn, f'SELECT AVG("DELAY_DUE_CARRIER") AS Carrier, AVG("DELAY_DUE_WEATHER") AS Weather, AVG("DELAY_DUE_NAS") AS NAS, AVG("DELAY_DUE_SECURITY") AS Security, AVG("DELAY_DUE_LATE_AIRCRAFT") AS "Late Aircraft" FROM flights {where_arr}', params_arr)
             delay_data = delay_df.iloc[0].fillna(0).reset_index()
             delay_data.columns = ['Driver', 'Avg_Minutes']
             delay_data = delay_data.sort_values(by='Avg_Minutes', ascending=False)
@@ -650,36 +732,40 @@ if page == "Arrivals Intelligence":
     col_table, col_radar = st.columns([1.3, 1])
     with col_table:
         with st.container(border=True):
-            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>📋 Inbound Flight Records Table</div>", unsafe_allow_html=True)
-            table_df = conn.execute(f'SELECT "FL_DATE", "{airline_col_name}" AS AIRLINE, "FL_NUMBER", "ORIGIN", "ARR_DELAY", "CANCELLED", "DISTANCE" FROM flights {where_arr} ORDER BY "FL_DATE" DESC LIMIT 100', params_arr).df()
+            th, tb = st.columns([3, 1])
+            with th:
+                st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>📋 Inbound Flight Records Table</div>", unsafe_allow_html=True)
+            table_df = run_query(conn, f'SELECT "FL_DATE", "{airline_col_name}" AS AIRLINE, "FL_NUMBER", "ORIGIN", "ARR_DELAY", "CANCELLED", "DISTANCE" FROM flights {where_arr} ORDER BY "FL_DATE" DESC LIMIT 100', params_arr)
+            with tb:
+                st.download_button("⬇️ Export CSV", table_df.to_csv(index=False).encode('utf-8'), "ord_inbound_flights.csv", "text/csv", width='stretch')
             st.dataframe(table_df, width='stretch', height=290)
 
     with col_radar:
         with st.container(border=True):
             radar_airlines = airlines if airlines else ['UA', 'AA', 'DL', 'OO', 'MQ', 'YX']
             selected_radar_airline = st.selectbox("Filter Radar Airline:", options=radar_airlines, format_func=lambda x: f"{x} - {AIRLINE_NAMES.get(str(x), 'Carrier')}", key="radar_arr_selector")
-            st.plotly_chart(create_airline_radar_chart(conn, selected_radar_airline, mode="ARRIVALS"), width='stretch')
+            st.plotly_chart(create_airline_radar_chart(conn, selected_radar_airline, mode="ARRIVALS", start_date=start_date, end_date=end_date), width='stretch')
 
 # ==================== DEPARTURES INTELLIGENCE PAGE ====================
 elif page == "Departures Intelligence":
     st.title("🛫 ORD Departures Intelligence")
     st.caption("2022 Operational Performance & Outbound Route Analytics")
 
-    kpi_df = conn.execute(f"""
+    kpi_df = run_query(conn, f"""
         SELECT COUNT(*) AS total_flights,
             AVG(CASE WHEN "DEP_DELAY" <= 15 THEN 1 ELSE 0 END) * 100 AS on_time_pct,
             AVG("DEP_DELAY") AS avg_delay, SUM("CANCELLED") AS total_cancelled, SUM("DIVERTED") AS total_diverted
         FROM flights {where_dep}
-    """, params_dep).df()
+    """, params_dep)
     total_flights, on_time_pct, avg_delay, total_cancelled, total_diverted = kpi_df.iloc[0]
 
-    monthly_trend = conn.execute(f"""
+    monthly_trend = run_query(conn, f"""
         SELECT MONTH(TRY_CAST(CAST("FL_DATE" AS VARCHAR) AS DATE)) AS month,
             COUNT(*) AS flights, AVG("DEP_DELAY") AS delay,
             AVG(CASE WHEN "DEP_DELAY" <= 15 THEN 1 ELSE 0 END) * 100 AS on_time,
             SUM("CANCELLED") AS cancelled, SUM("DIVERTED") AS diverted
         FROM flights {where_dep} GROUP BY month HAVING month IS NOT NULL ORDER BY month
-    """, params_dep).df()
+    """, params_dep)
 
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
@@ -697,6 +783,7 @@ elif page == "Departures Intelligence":
     with c5:
         st.markdown(f"<div style='text-align: center;'><div style='font-size: 0.72rem; font-weight: 700; color: #475569;'>DIVERTED</div><div style='font-size: 1.3rem; font-weight: 800; color: #0A192F;'>{safe_int(total_diverted):,}</div></div>", unsafe_allow_html=True)
         st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'diverted', '#38BDF8'), width='stretch', config={'displayModeBar': False})
+    st.caption("Sparklines show the monthly trend across the selected date range. \"On-Time\" follows the DOT convention: departure delay ≤ 15 minutes.")
 
     col_left, col_right = st.columns([1, 1])
     with col_left:
@@ -710,7 +797,7 @@ elif page == "Departures Intelligence":
             }
             sql_val, sql_ord = measure_map[measure]
 
-            dests_df = conn.execute(f'SELECT "DEST" AS code, {sql_val} AS val FROM flights {where_dep} GROUP BY code ORDER BY val {sql_ord} LIMIT 10', params_dep).df()
+            dests_df = run_query(conn, f'SELECT "DEST" AS code, {sql_val} AS val FROM flights {where_dep} GROUP BY code ORDER BY val {sql_ord} LIMIT 10', params_dep)
             dests_df['full_label'] = dests_df['code'].apply(lambda x: f"{x} ({AIRPORT_CITY_NAMES.get(x, 'Destination')})")
 
             fig_dest = px.bar(dests_df, y='full_label', x='val', orientation='h', title=f"Top 10 Destination Hubs by {measure}", text_auto='.1f' if 'Delay' in measure or 'Time' in measure else True)
@@ -719,7 +806,7 @@ elif page == "Departures Intelligence":
             fig_dest.update_layout(yaxis=dict(autorange="reversed", title=""), xaxis=dict(title=measure), margin=dict(l=10, r=25, t=35, b=10), height=320)
             st.plotly_chart(fig_dest, width='stretch')
 
-            airlines_df = conn.execute(f'SELECT "{airline_col_name}" AS code, {sql_val} AS val FROM flights {where_dep} GROUP BY code ORDER BY val {sql_ord} LIMIT 10', params_dep).df()
+            airlines_df = run_query(conn, f'SELECT "{airline_col_name}" AS code, {sql_val} AS val FROM flights {where_dep} GROUP BY code ORDER BY val {sql_ord} LIMIT 10', params_dep)
             airlines_df['full_label'] = airlines_df['code'].apply(lambda x: f"{x} ({AIRLINE_NAMES.get(str(x), 'Carrier')})")
 
             fig_air = px.bar(airlines_df, y='full_label', x='val', orientation='h', title=f"Top 10 Airlines by {measure}", text_auto='.1f' if 'Delay' in measure or 'Time' in measure else True)
@@ -730,22 +817,22 @@ elif page == "Departures Intelligence":
 
     with col_right:
         with st.container(border=True):
-            st.plotly_chart(create_3d_flight_map(conn, mode="DEPARTURES"), width='stretch')
+            st.plotly_chart(create_3d_flight_map(conn, mode="DEPARTURES", start_date=start_date, end_date=end_date), width='stretch')
         with st.container(border=True):
-            st.plotly_chart(create_airline_connectivity_barchart(conn, mode="DEPARTURES"), width='stretch')
+            st.plotly_chart(create_airline_connectivity_barchart(conn, mode="DEPARTURES", start_date=start_date, end_date=end_date), width='stretch')
 
     col_longest, col_delayed = st.columns(2)
     with col_longest:
         with st.container(border=True):
             st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>✈️ Top 5 Longest Outbound Routes</div>", unsafe_allow_html=True)
-            longest_df = conn.execute(f'SELECT "FL_NUMBER", "{airline_col_name}" AS AIRLINE_CODE, "DEST", "FL_DATE", COALESCE("CRS_DEP_TIME", 0) AS crs_dep, COALESCE("ARR_TIME", 0) AS actual_arr, COALESCE("ELAPSED_TIME", 0) AS elapsed_time, COALESCE("DEP_DELAY", 0) AS delay_val FROM flights {where_dep} ORDER BY "ELAPSED_TIME" DESC LIMIT 5', params_dep).df()
+            longest_df = run_query(conn, f'SELECT "FL_NUMBER", "{airline_col_name}" AS AIRLINE_CODE, "DEST", "FL_DATE", COALESCE("CRS_DEP_TIME", 0) AS crs_dep, COALESCE("ARR_TIME", 0) AS actual_arr, COALESCE("ELAPSED_TIME", 0) AS elapsed_time, COALESCE("DEP_DELAY", 0) AS delay_val FROM flights {where_dep} ORDER BY "ELAPSED_TIME" DESC LIMIT 5', params_dep)
             for _, row in longest_df.iterrows():
                 render_flight_card_clean(row, is_delayed=False, mode="DEPARTURES")
 
     with col_delayed:
         with st.container(border=True):
             st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>⚠️ Top 5 Most Delayed Outbound Flights</div>", unsafe_allow_html=True)
-            delayed_df = conn.execute(f'SELECT "FL_NUMBER", "{airline_col_name}" AS AIRLINE_CODE, "DEST", "FL_DATE", COALESCE("CRS_DEP_TIME", 0) AS crs_dep, COALESCE("ARR_TIME", 0) AS actual_arr, COALESCE("ELAPSED_TIME", 0) AS elapsed_time, COALESCE("DEP_DELAY", 0) AS delay_val FROM flights {where_dep} ORDER BY "DEP_DELAY" DESC LIMIT 5', params_dep).df()
+            delayed_df = run_query(conn, f'SELECT "FL_NUMBER", "{airline_col_name}" AS AIRLINE_CODE, "DEST", "FL_DATE", COALESCE("CRS_DEP_TIME", 0) AS crs_dep, COALESCE("ARR_TIME", 0) AS actual_arr, COALESCE("ELAPSED_TIME", 0) AS elapsed_time, COALESCE("DEP_DELAY", 0) AS delay_val FROM flights {where_dep} ORDER BY "DEP_DELAY" DESC LIMIT 5', params_dep)
             for _, row in delayed_df.iterrows():
                 render_flight_card_clean(row, is_delayed=True, mode="DEPARTURES")
 
@@ -755,11 +842,11 @@ elif page == "Departures Intelligence":
             st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 6px;'>Departure Volume Heatmap</div>", unsafe_allow_html=True)
             heat_dim = st.segmented_control("Departure Heatmap Select", ["Month vs. Hour", "Day of Week vs. Hour"], default="Month vs. Hour", key="dep_heat_seg", label_visibility="collapsed")
             if heat_dim == "Month vs. Hour":
-                heat_df = conn.execute(f'SELECT MONTH(TRY_CAST(CAST("FL_DATE" AS VARCHAR) AS DATE)) AS row_dim, CAST("CRS_DEP_TIME" / 100 AS INT) AS hour, COUNT(*) AS flights FROM flights {where_dep} GROUP BY row_dim, hour ORDER BY row_dim, hour', params_dep).df()
+                heat_df = run_query(conn, f'SELECT MONTH(TRY_CAST(CAST("FL_DATE" AS VARCHAR) AS DATE)) AS row_dim, CAST("CRS_DEP_TIME" / 100 AS INT) AS hour, COUNT(*) AS flights FROM flights {where_dep} GROUP BY row_dim, hour ORDER BY row_dim, hour', params_dep)
                 heat_df['row_dim'] = heat_df['row_dim'].map({1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'May', 6:'Jun', 7:'Jul', 8:'Aug', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dec'})
                 y_label = "Month"
             else:
-                heat_df = conn.execute(f'SELECT DAYOFWEEK(TRY_CAST(CAST("FL_DATE" AS VARCHAR) AS DATE)) AS row_dim, CAST("CRS_DEP_TIME" / 100 AS INT) AS hour, COUNT(*) AS flights FROM flights {where_dep} GROUP BY row_dim, hour ORDER BY row_dim, hour', params_dep).df()
+                heat_df = run_query(conn, f'SELECT DAYOFWEEK(TRY_CAST(CAST("FL_DATE" AS VARCHAR) AS DATE)) AS row_dim, CAST("CRS_DEP_TIME" / 100 AS INT) AS hour, COUNT(*) AS flights FROM flights {where_dep} GROUP BY row_dim, hour ORDER BY row_dim, hour', params_dep)
                 heat_df['row_dim'] = heat_df['row_dim'].map({0:'Sun', 1:'Mon', 2:'Tue', 3:'Wed', 4:'Thu', 5:'Fri', 6:'Sat'})
                 y_label = "Day of Week"
 
@@ -772,7 +859,7 @@ elif page == "Departures Intelligence":
     with c_delay:
         with st.container(border=True):
             st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 6px;'>Departure Delay Drivers</div>", unsafe_allow_html=True)
-            delay_df = conn.execute(f'SELECT AVG("DELAY_DUE_CARRIER") AS Carrier, AVG("DELAY_DUE_WEATHER") AS Weather, AVG("DELAY_DUE_NAS") AS NAS, AVG("DELAY_DUE_SECURITY") AS Security, AVG("DELAY_DUE_LATE_AIRCRAFT") AS "Late Aircraft" FROM flights {where_dep}', params_dep).df()
+            delay_df = run_query(conn, f'SELECT AVG("DELAY_DUE_CARRIER") AS Carrier, AVG("DELAY_DUE_WEATHER") AS Weather, AVG("DELAY_DUE_NAS") AS NAS, AVG("DELAY_DUE_SECURITY") AS Security, AVG("DELAY_DUE_LATE_AIRCRAFT") AS "Late Aircraft" FROM flights {where_dep}', params_dep)
             delay_data = delay_df.iloc[0].fillna(0).reset_index()
             delay_data.columns = ['Driver', 'Avg_Minutes']
             delay_data = delay_data.sort_values(by='Avg_Minutes', ascending=False)
@@ -786,26 +873,48 @@ elif page == "Departures Intelligence":
     col_table, col_radar = st.columns([1.3, 1])
     with col_table:
         with st.container(border=True):
-            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>📋 Outbound Flight Records Table</div>", unsafe_allow_html=True)
-            table_df = conn.execute(f'SELECT "FL_DATE", "{airline_col_name}" AS AIRLINE, "FL_NUMBER", "DEST", "DEP_DELAY", "CANCELLED", "DISTANCE" FROM flights {where_dep} ORDER BY "FL_DATE" DESC LIMIT 100', params_dep).df()
+            th, tb = st.columns([3, 1])
+            with th:
+                st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>📋 Outbound Flight Records Table</div>", unsafe_allow_html=True)
+            table_df = run_query(conn, f'SELECT "FL_DATE", "{airline_col_name}" AS AIRLINE, "FL_NUMBER", "DEST", "DEP_DELAY", "CANCELLED", "DISTANCE" FROM flights {where_dep} ORDER BY "FL_DATE" DESC LIMIT 100', params_dep)
+            with tb:
+                st.download_button("⬇️ Export CSV", table_df.to_csv(index=False).encode('utf-8'), "ord_outbound_flights.csv", "text/csv", width='stretch')
             st.dataframe(table_df, width='stretch', height=290)
 
     with col_radar:
         with st.container(border=True):
             radar_airlines = airlines if airlines else ['UA', 'AA', 'DL', 'OO', 'MQ', 'YX']
             selected_radar_airline = st.selectbox("Filter Radar Airline:", options=radar_airlines, format_func=lambda x: f"{x} - {AIRLINE_NAMES.get(str(x), 'Carrier')}", key="radar_dep_selector")
-            st.plotly_chart(create_airline_radar_chart(conn, selected_radar_airline, mode="DEPARTURES"), width='stretch')
+            st.plotly_chart(create_airline_radar_chart(conn, selected_radar_airline, mode="DEPARTURES", start_date=start_date, end_date=end_date), width='stretch')
 
 # ==================== DELAY PREDICTOR PAGE ====================
 elif page == "🔮 Delay Predictor":
     st.title("🔮 Enhanced Machine Learning Intelligence")
     st.caption("Multi-tiered Delay Severity & Cancellation Risk Prediction Models.")
 
-    severity_model, cancel_model, encoder, origins_list, dests_list = train_enhanced_prediction_models(conn)
+    severity_model, cancel_model, encoder, origins_list, dests_list, model_metrics = train_enhanced_prediction_models(conn)
 
     if not severity_model or not cancel_model or not encoder:
-        st.warning("Prediction model requires sufficient historical data. Please ensure 'flights_2022.csv' contains valid records.")
+        if model_metrics and 'error' in model_metrics:
+            st.error(f"Model training failed with an error: {model_metrics['error']}")
+        else:
+            st.warning("Prediction model requires sufficient historical data. Please ensure 'flights_2022.csv' contains valid records.")
     else:
+        if model_metrics:
+            with st.container(border=True):
+                st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>📐 Model Validation (held out 20% of the data, never seen during training)</div>", unsafe_allow_html=True)
+                mv1, mv2, mv3, mv4 = st.columns(4)
+                mv1.metric("Severity Accuracy", f"{model_metrics['severity_accuracy']*100:.1f}%")
+                mv2.metric("Severity F1 (macro)", f"{model_metrics['severity_f1']:.2f}")
+                mv3.metric("Cancellation Accuracy", f"{model_metrics['cancel_accuracy']*100:.1f}%")
+                mv4.metric("Cancellation F1", f"{model_metrics['cancel_f1']:.2f}")
+                st.caption(
+                    f"Trained on {model_metrics['n_train']:,} flights, validated on {model_metrics['n_test']:,} held-out flights. "
+                    f"Only {model_metrics['cancel_base_rate']*100:.1f}% of flights in this dataset were cancelled, so cancellation "
+                    "accuracy alone looks high even for a model that just always guesses 'not cancelled' — the F1 score above is the "
+                    "more honest number to watch for that model."
+                )
+
         with st.container(border=True):
             st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 12px;'>✈️ Configure Flight Parameters</div>", unsafe_allow_html=True)
             p1, p2, p3 = st.columns(3)
@@ -815,14 +924,14 @@ elif page == "🔮 Delay Predictor":
             dest_opts = dests_list if dests_list else ['ORD', 'LAX', 'JFK', 'DFW']
 
             with p1:
-                input_airline = st.selectbox("Select Airline", options=airline_opts, format_func=lambda x: f"{x} - {AIRLINE_NAMES.get(str(x), 'Carrier')}")
-                input_month = st.slider("Flight Month", 1, 12, 6)
+                input_airline = st.selectbox("Select Airline", options=airline_opts, format_func=lambda x: f"{x} - {AIRLINE_NAMES.get(str(x), 'Carrier')}", help="The operating carrier code, e.g. AA for American Airlines")
+                input_month = st.slider("Flight Month", 1, 12, 6, help="Delay patterns shift seasonally - winter months tend to run higher weather-delay risk")
             with p2:
-                input_origin = st.selectbox("Origin Airport", options=orig_opts, index=orig_opts.index('ORD') if 'ORD' in orig_opts else 0)
-                input_hour = st.slider("Scheduled Departure Hour (24h)", 0, 23, 14)
+                input_origin = st.selectbox("Origin Airport", options=orig_opts, index=orig_opts.index('ORD') if 'ORD' in orig_opts else 0, help="Departure airport for this flight")
+                input_hour = st.slider("Scheduled Departure Hour (24h)", 0, 23, 14, help="24-hour scheduled departure time - delays tend to compound later in the day")
             with p3:
-                input_dest = st.selectbox("Destination Airport", options=dest_opts, index=dest_opts.index('LAX') if 'LAX' in dest_opts else 0)
-                input_dist = st.number_input("Route Distance (miles)", min_value=100, max_value=5000, value=800, step=50)
+                input_dest = st.selectbox("Destination Airport", options=dest_opts, index=dest_opts.index('LAX') if 'LAX' in dest_opts else 0, help="Arrival airport for this flight")
+                input_dist = st.number_input("Route Distance (miles)", min_value=100, max_value=5000, value=800, step=50, help="Great-circle distance for the route; longer flights have more time to recover from a delayed departure")
 
             run_predict = st.button("Run Predictive Risk Analysis", type="primary", width='stretch')
 
@@ -901,24 +1010,31 @@ elif page == "Flight Deep-Dive":
         st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>🎯 Select Flight Corridor</div>", unsafe_allow_html=True)
         rc1, rc2 = st.columns(2)
         with rc1:
-            all_origins = conn.execute("SELECT DISTINCT \"ORIGIN\" FROM flights WHERE \"ORIGIN\" IS NOT NULL ORDER BY 1").df().iloc[:, 0].tolist()
+            all_origins = run_query(conn, "SELECT DISTINCT \"ORIGIN\" FROM flights WHERE \"ORIGIN\" IS NOT NULL ORDER BY 1").iloc[:, 0].tolist()
             selected_orig = st.selectbox("Origin Airport", options=all_origins, index=all_origins.index('ORD') if 'ORD' in all_origins else 0)
         with rc2:
-            all_dests = conn.execute("SELECT DISTINCT \"DEST\" FROM flights WHERE \"DEST\" IS NOT NULL ORDER BY 1").df().iloc[:, 0].tolist()
+            all_dests = run_query(conn, "SELECT DISTINCT \"DEST\" FROM flights WHERE \"DEST\" IS NOT NULL ORDER BY 1").iloc[:, 0].tolist()
             selected_dest = st.selectbox("Destination Airport", options=all_dests, index=all_dests.index('LAX') if 'LAX' in all_dests else 0)
 
-    # Route Data Query
-    route_df = conn.execute("""
+    # Route Data Query (respects the sidebar date range so this page stays
+    # consistent with the rest of the app)
+    route_df = run_query(conn, """
         SELECT * FROM flights 
-        WHERE UPPER("ORIGIN") = ? AND UPPER("DEST") = ?
-    """, [selected_orig.upper(), selected_dest.upper()]).df()
+        WHERE UPPER("ORIGIN") = ? AND UPPER("DEST") = ? AND "FL_DATE" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+    """, [selected_orig.upper(), selected_dest.upper(), str(start_date), str(end_date)])
 
     if route_df.empty:
-        st.warning(f"No direct flight records found for route: **{selected_orig} ➔ {selected_dest}**")
+        st.warning(f"No direct flight records found for route: **{selected_orig} ➔ {selected_dest}** in the selected date range.")
     else:
         route_df.columns = [c.upper() for c in route_df.columns]
-        airline_col = 'AIRLINE_CODE' if 'AIRLINE_CODE' in route_df.columns else ('AIRLINE' if 'AIRLINE' in route_df.columns else 'OP_UNIQUE_CARRIER')
-        
+        airline_col = get_airline_col(route_df.columns)
+
+        st.download_button(
+            "⬇️ Export this route's records (CSV)",
+            route_df.to_csv(index=False).encode('utf-8'),
+            f"ord_route_{selected_orig}_{selected_dest}.csv", "text/csv"
+        )
+
         # Route Overview KPIs
         k1, k2, k3, k4 = st.columns(4)
         total_route_flights = len(route_df)
@@ -940,6 +1056,7 @@ elif page == "Flight Deep-Dive":
         with c_carrier:
             with st.container(border=True):
                 st.markdown(f"##### ✈️ Carrier Reliability on {selected_orig} ➔ {selected_dest}")
+                st.caption("Bar height = avg delay (mins). Color = on-time % (green is better).")
                 carrier_stats = route_df.groupby(airline_col).agg(
                     Flights=(airline_col, 'count'),
                     Avg_Delay=('ARR_DELAY', lambda x: round(x.mean(), 1)),
@@ -948,8 +1065,7 @@ elif page == "Flight Deep-Dive":
                 carrier_stats['Carrier_Name'] = carrier_stats[airline_col].apply(lambda x: f"{x} ({AIRLINE_NAMES.get(str(x), 'Airline')})")
                 
                 fig_carrier = px.bar(carrier_stats, x='Carrier_Name', y='Avg_Delay', color='OnTime_Pct',
-                                     color_continuous_scale='RdYlGn', text_auto=True,
-                                     title="Avg Delay (Mins) & On-Time % Color Scale")
+                                     color_continuous_scale='RdYlGn', text_auto=True)
                 fig_carrier = apply_white_chart_theme(fig_carrier)
                 fig_carrier.update_layout(height=290, margin=dict(l=10, r=10, t=35, b=10), xaxis_title="")
                 st.plotly_chart(fig_carrier, width='stretch')
@@ -957,14 +1073,14 @@ elif page == "Flight Deep-Dive":
         with c_hour:
             with st.container(border=True):
                 st.markdown(f"##### ⏰ Optimal Flight Departure Time Windows")
+                st.caption("Average departure delay by scheduled hour - lower points are better times to fly.")
                 route_df['dep_hour'] = (route_df['CRS_DEP_TIME'] // 100).fillna(12).astype(int)
                 hourly_stats = route_df.groupby('dep_hour').agg(
                     Avg_Delay=('DEP_DELAY', 'mean'),
                     Flights=('dep_hour', 'count')
                 ).reset_index()
                 
-                fig_hour = px.line(hourly_stats, x='dep_hour', y='Avg_Delay', markers=True,
-                                   title="Departure Delay Trend by Hour of Day (24h)")
+                fig_hour = px.line(hourly_stats, x='dep_hour', y='Avg_Delay', markers=True)
                 fig_hour.update_traces(line_color='#0066CC', line_width=3)
                 fig_hour = apply_white_chart_theme(fig_hour)
                 fig_hour.update_layout(height=290, margin=dict(l=10, r=10, t=35, b=10), xaxis_title="Scheduled Hour", yaxis_title="Avg Delay (min)")
