@@ -108,6 +108,11 @@ st.markdown("""
         box-shadow: none !important;
     }
 
+    /* KPI metric and monthly trend share the same white card. */
+    div[data-testid="stVerticalBlockBorderWrapper"] .kpi-card {
+        background:#FFFFFF;
+    }
+
     div[data-testid="stSegmentedControl"] {
         background-color: #F1F5F9 !important;
         border-radius: 6px !important;
@@ -540,7 +545,7 @@ def train_enhanced_prediction_models(_conn):
 st.sidebar.title("✈️ ORD Analytics")
 st.sidebar.caption("Chicago O'Hare International Airport")
 st.sidebar.markdown("---")
-page = st.sidebar.radio("Navigation", ["Arrivals Intelligence", "Departures Intelligence", "🔮 Delay Predictor", "Flight Deep-Dive"])
+page = st.sidebar.radio("Navigation", ["Inbound Operations", "Outbound Operations", "🔮 Predictive Flight Risk", "Route & Flight Deep-Dive"])
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Filter Data")
@@ -596,9 +601,9 @@ if selected_airline:
     params_dep.extend(selected_airline)
 
 # ==================== ARRIVALS INTELLIGENCE PAGE ====================
-if page == "Arrivals Intelligence":
-    st.title("🛬 ORD Arrivals Intelligence")
-    st.caption("2022 Operational Performance & Inbound Route Analytics")
+if page == "Inbound Operations":
+    st.title("🛬 ORD Inbound Operations")
+    st.caption("Inbound traffic, reliability, route performance, and delay analytics")
     
     kpi_df = run_query(conn, f"""
         SELECT COUNT(*) AS total_flights,
@@ -617,21 +622,18 @@ if page == "Arrivals Intelligence":
     """, params_arr)
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    with c1:
-        st.markdown(f"<div style='text-align: center;'><div style='font-size: 0.72rem; font-weight: 700; color: #475569;'>TOTAL ARRIVALS</div><div style='font-size: 1.3rem; font-weight: 800; color: #0A192F;'>{safe_int(total_flights):,}</div></div>", unsafe_allow_html=True)
-        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#0066CC'), width='stretch', config={'displayModeBar': False})
-    with c2:
-        st.markdown(f"<div style='text-align: center;'><div style='font-size: 0.72rem; font-weight: 700; color: #475569;'>ON-TIME % (≤15M)</div><div style='font-size: 1.3rem; font-weight: 800; color: #10B981;'>{(on_time_pct or 0):.1f}%</div></div>", unsafe_allow_html=True)
-        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'on_time', '#10B981'), width='stretch', config={'displayModeBar': False})
-    with c3:
-        st.markdown(f"<div style='text-align: center;'><div style='font-size: 0.72rem; font-weight: 700; color: #475569;'>AVG DELAY</div><div style='font-size: 1.3rem; font-weight: 800; color: #D00000;'>{(avg_delay or 0):.1f}m</div></div>", unsafe_allow_html=True)
-        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'delay', '#D00000'), width='stretch', config={'displayModeBar': False})
-    with c4:
-        st.markdown(f"<div style='text-align: center;'><div style='font-size: 0.72rem; font-weight: 700; color: #475569;'>CANCELLED</div><div style='font-size: 1.3rem; font-weight: 800; color: #0A192F;'>{safe_int(total_cancelled):,}</div></div>", unsafe_allow_html=True)
-        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'cancelled', '#64748B'), width='stretch', config={'displayModeBar': False})
-    with c5:
-        st.markdown(f"<div style='text-align: center;'><div style='font-size: 0.72rem; font-weight: 700; color: #475569;'>DIVERTED</div><div style='font-size: 1.3rem; font-weight: 800; color: #0A192F;'>{safe_int(total_diverted):,}</div></div>", unsafe_allow_html=True)
-        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'diverted', '#38BDF8'), width='stretch', config={'displayModeBar': False})
+    kpis = [
+        (c1, "TOTAL ARRIVALS", f"{safe_int(total_flights):,}", "flights"),
+        (c2, "ON-TIME % (≤15M)", f"{(on_time_pct or 0):.1f}%", "on_time"),
+        (c3, "AVG DELAY", f"{(avg_delay or 0):.1f}m", "delay"),
+        (c4, "CANCELLED", f"{safe_int(total_cancelled):,}", "cancelled"),
+        (c5, "DIVERTED", f"{safe_int(total_diverted):,}", "diverted")
+    ]
+    for col, label, value, metric_col in kpis:
+        with col:
+            with st.container(border=True):
+                st.markdown(f"<div style='text-align:center;'><div style='font-size:.70rem;font-weight:700;color:#475569;'>{label}</div><div style='font-size:1.30rem;font-weight:800;color:#0A192F;margin-top:1px;'>{value}</div></div>", unsafe_allow_html=True)
+                st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', metric_col, '#0066CC'), width='stretch', config={'displayModeBar': False})
 
     col_left, col_right = st.columns([1, 1])
     with col_left:
@@ -658,7 +660,7 @@ if page == "Arrivals Intelligence":
             airlines_df['full_label'] = airlines_df['code'].apply(lambda x: AIRLINE_NAMES.get(str(x), str(x)))
 
             fig_air = px.bar(airlines_df, y='full_label', x='val', orientation='h', title=f"Top 10 Airlines by {measure}", text_auto='.1f' if 'Delay' in measure or 'Time' in measure else True)
-            fig_air.update_traces(marker_color="#0066CC", textposition="outside", width=0.64)
+            fig_air.update_traces(marker_color="#0066CC", textposition="outside", width=0.51)
             fig_air = apply_white_chart_theme(fig_air)
             fig_air.update_layout(yaxis=dict(autorange="reversed", title=""), xaxis=dict(title=measure), margin=dict(l=10, r=25, t=35, b=10), height=256)
             st.plotly_chart(fig_air, width='stretch')
@@ -701,7 +703,7 @@ if page == "Arrivals Intelligence":
             pivot_heat = heat_df.pivot(index='row_dim', columns='hour', values='flights').fillna(0)
             fig_heat = go.Figure(data=go.Heatmap(z=pivot_heat.values, x=pivot_heat.columns, y=pivot_heat.index, colorscale="Blues", showscale=False, xgap=2, ygap=2, hovertemplate="Hour %{x}: %{z:,} flights<extra></extra>"))
             fig_heat = apply_white_chart_theme(fig_heat)
-            fig_heat.update_layout(height=280, margin=dict(l=10,r=10,t=10,b=10), xaxis=dict(title="Hour of Day (24h)",tickmode="linear",tick0=0,dtick=1,tickangle=0,automargin=True,showgrid=False,zeroline=False), yaxis=dict(title=y_label,showgrid=False,zeroline=False))
+            fig_heat.update_layout(height=300, margin=dict(l=10,r=10,t=10,b=10), xaxis=dict(title="Hour of Day (24h)",tickmode="linear",tick0=0,dtick=1,tickangle=0,automargin=True,showgrid=False,zeroline=False), yaxis=dict(title=y_label,showgrid=False,zeroline=False))
             st.plotly_chart(fig_heat, width='stretch')
 
     with c_delay:
@@ -715,16 +717,10 @@ if page == "Arrivals Intelligence":
             fig_delay_bar = px.bar(delay_data, x='Driver', y='Avg_Minutes', title="Avg Delay Contribution (Minutes)", text_auto='.1f')
             fig_delay_bar.update_traces(marker_color='#0066CC', textposition='outside')
             fig_delay_bar = apply_white_chart_theme(fig_delay_bar)
-            fig_delay_bar.update_layout(height=280, margin=dict(l=10, r=10, t=35, b=10), xaxis=dict(title=""), yaxis=dict(title="Minutes"))
+            fig_delay_bar.update_layout(height=300, margin=dict(l=10, r=10, t=35, b=10), xaxis=dict(title=""), yaxis=dict(title="Minutes"))
             st.plotly_chart(fig_delay_bar, width='stretch')
 
-    col_table, col_radar = st.columns([1.3, 1])
-    with col_table:
-        with st.container(border=True):
-            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>📋 Inbound Flight Records Table</div>", unsafe_allow_html=True)
-            table_df = run_query(conn, f'SELECT "FL_DATE", "{airline_col_name}" AS AIRLINE, "FL_NUMBER", "ORIGIN", "ARR_DELAY", "CANCELLED", "DISTANCE" FROM flights {where_arr} ORDER BY "FL_DATE" DESC LIMIT 100', params_arr)
-            st.dataframe(table_df, width='stretch', height=320)
-
+    col_radar, col_table = st.columns([1.3, 1])
     with col_radar:
         with st.container(border=True):
             rh1, rh2 = st.columns([2.1, 1.1])
@@ -736,10 +732,17 @@ if page == "Arrivals Intelligence":
             st.markdown(f"<div style='font-size:.82rem;color:#64748B;margin:-2px 0 4px 2px;'>Selected airline: <b>{selected_radar_airline} — {AIRLINE_NAMES.get(str(selected_radar_airline), 'Carrier')}</b></div>", unsafe_allow_html=True)
             st.plotly_chart(create_airline_radar_chart(conn, selected_radar_airline, mode="ARRIVALS", start_date=start_date, end_date=end_date), width='stretch')
 
+    with col_table:
+        with st.container(border=True):
+            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>📋 Inbound Flight Records Table</div>", unsafe_allow_html=True)
+            table_df = run_query(conn, f'SELECT "FL_DATE", "{airline_col_name}" AS AIRLINE, "FL_NUMBER", "ORIGIN", "ARR_DELAY", "CANCELLED", "DISTANCE" FROM flights {where_arr} ORDER BY "FL_DATE" DESC LIMIT 100', params_arr)
+            st.dataframe(table_df, width='stretch', height=320)
+
 # ==================== DEPARTURES INTELLIGENCE PAGE ====================
-elif page == "Departures Intelligence":
-    st.title("🛫 ORD Departures Intelligence")
-    st.caption("2022 Operational Performance & Outbound Route Analytics")
+
+elif page == "Outbound Operations":
+    st.title("🛫 ORD Outbound Operations")
+    st.caption("Outbound traffic, reliability, route performance, and delay analytics")
 
     kpi_df = run_query(conn, f"""
         SELECT COUNT(*) AS total_flights,
@@ -758,21 +761,18 @@ elif page == "Departures Intelligence":
     """, params_dep)
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    with c1:
-        st.markdown(f"<div style='text-align: center;'><div style='font-size: 0.72rem; font-weight: 700; color: #475569;'>TOTAL DEPARTURES</div><div style='font-size: 1.3rem; font-weight: 800; color: #0A192F;'>{safe_int(total_flights):,}</div></div>", unsafe_allow_html=True)
-        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'flights', '#0066CC'), width='stretch', config={'displayModeBar': False})
-    with c2:
-        st.markdown(f"<div style='text-align: center;'><div style='font-size: 0.72rem; font-weight: 700; color: #475569;'>ON-TIME % (≤15M)</div><div style='font-size: 1.3rem; font-weight: 800; color: #10B981;'>{(on_time_pct or 0):.1f}%</div></div>", unsafe_allow_html=True)
-        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'on_time', '#10B981'), width='stretch', config={'displayModeBar': False})
-    with c3:
-        st.markdown(f"<div style='text-align: center;'><div style='font-size: 0.72rem; font-weight: 700; color: #475569;'>AVG DELAY</div><div style='font-size: 1.3rem; font-weight: 800; color: #D00000;'>{(avg_delay or 0):.1f}m</div></div>", unsafe_allow_html=True)
-        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'delay', '#D00000'), width='stretch', config={'displayModeBar': False})
-    with c4:
-        st.markdown(f"<div style='text-align: center;'><div style='font-size: 0.72rem; font-weight: 700; color: #475569;'>CANCELLED</div><div style='font-size: 1.3rem; font-weight: 800; color: #0A192F;'>{safe_int(total_cancelled):,}</div></div>", unsafe_allow_html=True)
-        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'cancelled', '#64748B'), width='stretch', config={'displayModeBar': False})
-    with c5:
-        st.markdown(f"<div style='text-align: center;'><div style='font-size: 0.72rem; font-weight: 700; color: #475569;'>DIVERTED</div><div style='font-size: 1.3rem; font-weight: 800; color: #0A192F;'>{safe_int(total_diverted):,}</div></div>", unsafe_allow_html=True)
-        st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', 'diverted', '#38BDF8'), width='stretch', config={'displayModeBar': False})
+    kpis = [
+        (c1, "TOTAL DEPARTURES", f"{safe_int(total_flights):,}", "flights"),
+        (c2, "ON-TIME % (≤15M)", f"{(on_time_pct or 0):.1f}%", "on_time"),
+        (c3, "AVG DELAY", f"{(avg_delay or 0):.1f}m", "delay"),
+        (c4, "CANCELLED", f"{safe_int(total_cancelled):,}", "cancelled"),
+        (c5, "DIVERTED", f"{safe_int(total_diverted):,}", "diverted")
+    ]
+    for col, label, value, metric_col in kpis:
+        with col:
+            with st.container(border=True):
+                st.markdown(f"<div style='text-align:center;'><div style='font-size:.70rem;font-weight:700;color:#475569;'>{label}</div><div style='font-size:1.30rem;font-weight:800;color:#0A192F;margin-top:1px;'>{value}</div></div>", unsafe_allow_html=True)
+                st.plotly_chart(create_monthly_kpi_chart(monthly_trend, 'month', metric_col, '#0066CC'), width='stretch', config={'displayModeBar': False})
 
     col_left, col_right = st.columns([1, 1])
     with col_left:
@@ -799,7 +799,7 @@ elif page == "Departures Intelligence":
             airlines_df['full_label'] = airlines_df['code'].apply(lambda x: AIRLINE_NAMES.get(str(x), str(x)))
 
             fig_air = px.bar(airlines_df, y='full_label', x='val', orientation='h', title=f"Top 10 Airlines by {measure}", text_auto='.1f' if 'Delay' in measure or 'Time' in measure else True)
-            fig_air.update_traces(marker_color="#0066CC", textposition="outside", width=0.64)
+            fig_air.update_traces(marker_color="#0066CC", textposition="outside", width=0.51)
             fig_air = apply_white_chart_theme(fig_air)
             fig_air.update_layout(yaxis=dict(autorange="reversed", title=""), xaxis=dict(title=measure), margin=dict(l=10, r=25, t=35, b=10), height=256)
             st.plotly_chart(fig_air, width='stretch')
@@ -842,7 +842,7 @@ elif page == "Departures Intelligence":
             pivot_heat = heat_df.pivot(index='row_dim', columns='hour', values='flights').fillna(0)
             fig_heat = go.Figure(data=go.Heatmap(z=pivot_heat.values, x=pivot_heat.columns, y=pivot_heat.index, colorscale="Blues", showscale=False, xgap=2, ygap=2, hovertemplate="Hour %{x}: %{z:,} flights<extra></extra>"))
             fig_heat = apply_white_chart_theme(fig_heat)
-            fig_heat.update_layout(height=280, margin=dict(l=10,r=10,t=10,b=10), xaxis=dict(title="Hour of Day (24h)",tickmode="linear",tick0=0,dtick=1,tickangle=0,automargin=True,showgrid=False,zeroline=False), yaxis=dict(title=y_label,showgrid=False,zeroline=False))
+            fig_heat.update_layout(height=300, margin=dict(l=10,r=10,t=10,b=10), xaxis=dict(title="Hour of Day (24h)",tickmode="linear",tick0=0,dtick=1,tickangle=0,automargin=True,showgrid=False,zeroline=False), yaxis=dict(title=y_label,showgrid=False,zeroline=False))
             st.plotly_chart(fig_heat, width='stretch')
 
     with c_delay:
@@ -856,16 +856,10 @@ elif page == "Departures Intelligence":
             fig_delay_bar = px.bar(delay_data, x='Driver', y='Avg_Minutes', title="Avg Delay Contribution (Minutes)", text_auto='.1f')
             fig_delay_bar.update_traces(marker_color='#0066CC', textposition='outside')
             fig_delay_bar = apply_white_chart_theme(fig_delay_bar)
-            fig_delay_bar.update_layout(height=280, margin=dict(l=10, r=10, t=35, b=10), xaxis=dict(title=""), yaxis=dict(title="Minutes"))
+            fig_delay_bar.update_layout(height=300, margin=dict(l=10, r=10, t=35, b=10), xaxis=dict(title=""), yaxis=dict(title="Minutes"))
             st.plotly_chart(fig_delay_bar, width='stretch')
 
-    col_table, col_radar = st.columns([1.3, 1])
-    with col_table:
-        with st.container(border=True):
-            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>📋 Outbound Flight Records Table</div>", unsafe_allow_html=True)
-            table_df = run_query(conn, f'SELECT "FL_DATE", "{airline_col_name}" AS AIRLINE, "FL_NUMBER", "DEST", "DEP_DELAY", "CANCELLED", "DISTANCE" FROM flights {where_dep} ORDER BY "FL_DATE" DESC LIMIT 100', params_dep)
-            st.dataframe(table_df, width='stretch', height=320)
-
+    col_radar, col_table = st.columns([1.3, 1])
     with col_radar:
         with st.container(border=True):
             rh1, rh2 = st.columns([2.1, 1.1])
@@ -877,10 +871,17 @@ elif page == "Departures Intelligence":
             st.markdown(f"<div style='font-size:.82rem;color:#64748B;margin:-2px 0 4px 2px;'>Selected airline: <b>{selected_radar_airline} — {AIRLINE_NAMES.get(str(selected_radar_airline), 'Carrier')}</b></div>", unsafe_allow_html=True)
             st.plotly_chart(create_airline_radar_chart(conn, selected_radar_airline, mode="DEPARTURES", start_date=start_date, end_date=end_date), width='stretch')
 
+    with col_table:
+        with st.container(border=True):
+            st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>📋 Outbound Flight Records Table</div>", unsafe_allow_html=True)
+            table_df = run_query(conn, f'SELECT "FL_DATE", "{airline_col_name}" AS AIRLINE, "FL_NUMBER", "DEST", "DEP_DELAY", "CANCELLED", "DISTANCE" FROM flights {where_dep} ORDER BY "FL_DATE" DESC LIMIT 100', params_dep)
+            st.dataframe(table_df, width='stretch', height=320)
+
 # ==================== DELAY PREDICTOR PAGE ====================
-elif page == "🔮 Delay Predictor":
-    st.title("🔮 Enhanced Machine Learning Intelligence")
-    st.caption("Multi-tiered Delay Severity & Cancellation Risk Prediction Models.")
+
+elif page == "🔮 Predictive Flight Risk":
+    st.title("🔮 Predictive Flight Risk")
+    st.caption("Machine-learning estimates for delay severity and cancellation risk")
 
     severity_model, cancel_model, encoder, origins_list, dests_list, model_metrics = train_enhanced_prediction_models(conn)
 
@@ -991,26 +992,35 @@ elif page == "🔮 Delay Predictor":
                 st.error(f"Prediction failed: {str(e)}")
 
 # ==================== FLIGHT DEEP-DIVE PAGE ====================
-elif page == "Flight Deep-Dive":
-    st.title("🔎 Flight Deep-Dive")
+elif page == "Route & Flight Deep-Dive":
+    st.title("🔎 Route & Flight Deep-Dive")
     st.caption("Route-level operational intelligence, reliability patterns, delay drivers, traffic patterns, and advanced risk analytics.")
 
     with st.container(border=True):
-        st.markdown("<div style='font-weight:700;color:#0F172A;font-size:1rem;margin-bottom:8px;'>🎯 Flight Corridor</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-weight:700;color:#0F172A;font-size:1rem;margin-bottom:8px;'>🎯 ORD Flight Corridor</div>", unsafe_allow_html=True)
         rc1, rc2, rc3 = st.columns(3)
-        all_origins = run_query(conn, 'SELECT DISTINCT "ORIGIN" FROM flights WHERE "ORIGIN" IS NOT NULL ORDER BY 1').iloc[:,0].tolist()
-        all_dests = run_query(conn, 'SELECT DISTINCT "DEST" FROM flights WHERE "DEST" IS NOT NULL ORDER BY 1').iloc[:,0].tolist()
         with rc1:
-            selected_orig=st.selectbox("Origin Airport",all_origins,index=all_origins.index('ORD') if 'ORD' in all_origins else 0,format_func=lambda x:f"{x} — {AIRPORT_CITY_NAMES.get(x,x)}")
+            deep_direction = st.selectbox("Direction", ["Inbound to ORD", "Outbound from ORD"], key="deep_direction")
+        if deep_direction == "Inbound to ORD":
+            counterpart_df = run_query(conn, 'SELECT DISTINCT "ORIGIN" FROM flights WHERE UPPER("DEST") = ? AND "FL_DATE" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE) ORDER BY 1', ["ORD", str(start_date), str(end_date)])
+        else:
+            counterpart_df = run_query(conn, 'SELECT DISTINCT "DEST" FROM flights WHERE UPPER("ORIGIN") = ? AND "FL_DATE" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE) ORDER BY 1', ["ORD", str(start_date), str(end_date)])
+        counterpart_airports = counterpart_df.iloc[:,0].dropna().tolist()
         with rc2:
-            selected_dest=st.selectbox("Destination Airport",all_dests,index=all_dests.index('LAX') if 'LAX' in all_dests else 0,format_func=lambda x:f"{x} — {AIRPORT_CITY_NAMES.get(x,x)}")
+            selected_counterpart = st.selectbox("Connecting Airport", counterpart_airports, format_func=lambda x:f"{x} — {AIRPORT_CITY_NAMES.get(x,x)}", key="deep_counterpart")
         with rc3:
-            deep_airline=st.selectbox("Airline",["All Airlines"]+(airlines if airlines else []),format_func=lambda x:"All Airlines" if x=="All Airlines" else f"{x} — {AIRLINE_NAMES.get(str(x),'Carrier')}")
+            deep_airline = st.selectbox("Airline", ["All Airlines"] + (airlines if airlines else []), format_func=lambda x:"All Airlines" if x=="All Airlines" else f"{x} — {AIRLINE_NAMES.get(str(x),'Carrier')}", key="deep_airline")
 
-    route_sql="SELECT * FROM flights WHERE UPPER(\"ORIGIN\")=? AND UPPER(\"DEST\")=? AND \"FL_DATE\" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)"
-    route_params=[selected_orig.upper(),selected_dest.upper(),str(start_date),str(end_date)]
-    if deep_airline!="All Airlines":
-        route_sql+=f' AND "{airline_col_name}"=?'; route_params.append(deep_airline)
+    if deep_direction == "Inbound to ORD":
+        selected_orig, selected_dest = selected_counterpart, "ORD"
+    else:
+        selected_orig, selected_dest = "ORD", selected_counterpart
+
+    route_sql='SELECT * FROM flights WHERE UPPER("ORIGIN")=? AND UPPER("DEST")=? AND "FL_DATE" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)'
+    route_params=[selected_orig.upper(), selected_dest.upper(), str(start_date), str(end_date)]
+    if deep_airline != "All Airlines":
+        route_sql += f' AND "{airline_col_name}"=?'
+        route_params.append(deep_airline)
     route_df=run_query(conn,route_sql,route_params)
 
     if route_df.empty:
@@ -1071,7 +1081,14 @@ elif page == "Flight Deep-Dive":
         with b:
             with st.container(border=True):
                 st.markdown("### 🔬 Delay vs. Distance")
-                fig=px.scatter(route_df,x="DISTANCE_NUM",y="ARR_DELAY_NUM",trendline="ols" if len(route_df)>=10 else None,opacity=.55); fig.update_traces(marker=dict(size=6,color="#0066CC")); fig=apply_white_chart_theme(fig); fig.update_layout(height=280,margin=dict(l=10,r=10,t=10,b=10),xaxis_title="Distance (miles)",yaxis_title="Arrival Delay (minutes)"); st.plotly_chart(fig,width='stretch')
+                fig=px.scatter(route_df,x="DISTANCE_NUM",y="ARR_DELAY_NUM",opacity=.55)
+                fig.update_traces(marker=dict(size=6,color="#0066CC"))
+                fit_df=route_df[["DISTANCE_NUM","ARR_DELAY_NUM"]].dropna()
+                if len(fit_df)>=10 and fit_df["DISTANCE_NUM"].nunique()>=2:
+                    slope,intercept=np.polyfit(fit_df["DISTANCE_NUM"],fit_df["ARR_DELAY_NUM"],1)
+                    x_fit=np.linspace(fit_df["DISTANCE_NUM"].min(),fit_df["DISTANCE_NUM"].max(),50)
+                    fig.add_trace(go.Scatter(x=x_fit,y=slope*x_fit+intercept,mode="lines",name="Trend",line=dict(color="#D97706",width=2,dash="dash")))
+                fig=apply_white_chart_theme(fig); fig.update_layout(height=280,margin=dict(l=10,r=10,t=10,b=10),xaxis_title="Distance (miles)",yaxis_title="Arrival Delay (minutes)"); st.plotly_chart(fig,width='stretch')
 
         with st.container(border=True):
             st.markdown("### 🧠 Advanced Route Risk Analytics")
