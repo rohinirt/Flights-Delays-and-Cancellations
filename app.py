@@ -298,18 +298,29 @@ def create_airline_connectivity_barchart(_conn, mode="ARRIVALS", start_date=None
         fig = go.Figure()
         msg = f"Connectivity data unavailable: {connectivity_error}" if connectivity_error else "No connectivity data for the selected filters"
         fig.add_annotation(text=msg, showarrow=False)
-        fig.update_layout(height=280, paper_bgcolor="#FFFFFF")
+        fig.update_layout(height=256, paper_bgcolor="#FFFFFF")
         return fig
 
     df['airline_name'] = df['airline'].apply(lambda x: AIRLINE_NAMES.get(str(x), str(x)))
     x_title = "Connected Origin Airports" if mode == "ARRIVALS" else "Connected Destination Airports"
 
     fig = px.bar(df, y='airline_name', x='unique_routes', orientation='h', text='unique_routes')
-    fig.update_traces(marker_color='#0066CC', textposition='outside', hovertemplate="<b>%{y}</b><br>Connected Hubs: %{x}<extra></extra>")
+    fig.update_traces(
+        marker_color='#0066CC',
+        textposition='outside',
+        width=0.64,
+        hovertemplate="<b>%{y}</b><br>Connected Hubs: %{x}<extra></extra>"
+    )
     fig = apply_white_chart_theme(fig)
     fig.update_layout(
-        title=dict(text=f"✈️ Top 10 Airlines by Hub Connectivity ({mode.title()})", font=dict(size=14, color="#0F172A")),
-        yaxis=dict(autorange="reversed", title=""), xaxis=dict(title=x_title), height=380, margin=dict(l=10, r=30, t=40, b=10)
+        title=dict(
+            text=f"✈️ Top 10 Airlines by Hub Connectivity ({mode.title()})",
+            font=dict(size=14, color="#0F172A")
+        ),
+        yaxis=dict(autorange="reversed", title=""),
+        xaxis=dict(title=x_title),
+        height=256,
+        margin=dict(l=10, r=25, t=35, b=10)
     )
     return fig
 
