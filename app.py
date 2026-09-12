@@ -194,16 +194,35 @@ def load_airport_coordinates():
     return base_coords
 
 def apply_white_chart_theme(fig):
+    # Plotly itself should have no inner frame/border. The surrounding
+    # Streamlit container remains the single visible white-card border.
     fig.update_layout(
         template="plotly_white",
         font=dict(color="#0f172a", family="sans-serif"),
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#FFFFFF",
         title=dict(font=dict(color="#0f172a", size=14, weight="bold")),
-        xaxis=dict(title=dict(font=dict(color="#0f172a")), tickfont=dict(color="#0f172a"), gridcolor="#f1f5f9"),
-        yaxis=dict(title=dict(font=dict(color="#0f172a")), tickfont=dict(color="#0f172a"), gridcolor="#f1f5f9"),
-        legend=dict(font=dict(color="#0f172a"))
+        xaxis=dict(
+            title=dict(font=dict(color="#0f172a")),
+            tickfont=dict(color="#0f172a"), gridcolor="#f1f5f9",
+            showline=False, mirror=False, zeroline=False, linecolor="rgba(0,0,0,0)"
+        ),
+        yaxis=dict(
+            title=dict(font=dict(color="#0f172a")),
+            tickfont=dict(color="#0f172a"), gridcolor="#f1f5f9",
+            showline=False, mirror=False, zeroline=False, linecolor="rgba(0,0,0,0)"
+        ),
+        legend=dict(font=dict(color="#0f172a")),
+        margin=dict(l=10, r=10, t=30, b=10)
     )
+    # Prevent accidental Plotly/Express placeholder labels from appearing.
+    if fig.layout.title and isinstance(fig.layout.title.text, str) and fig.layout.title.text.strip().lower() in {"undefined", "none", "nan"}:
+        fig.layout.title.text = ""
+    if fig.layout.annotations:
+        fig.layout.annotations = tuple(
+            a for a in fig.layout.annotations
+            if not (isinstance(a.text, str) and a.text.strip().lower() in {"undefined", "none", "nan"})
+        )
     return fig
 
 def create_monthly_kpi_chart(data, x_col, y_col, bar_color="#0066CC"):
@@ -1006,100 +1025,194 @@ elif page == "Flight Deep-Dive":
     st.title("🔎 Route & Flight Intelligence")
     st.caption("Route-level operational intelligence, reliability patterns, delay drivers, traffic patterns, and advanced risk analytics.")
 
+    # The source dataset used by this dashboard is intentionally filtered to
+    # ORD arrivals and ORD departures. Therefore Deep-Dive must use the same
+    # scope instead of offering arbitrary airport-to-airport combinations.
     with st.container(border=True):
         st.markdown("<div style='font-weight:700;color:#0F172A;font-size:1rem;margin-bottom:8px;'>🎯 Flight Corridor</div>", unsafe_allow_html=True)
-        rc1, rc2, rc3 = st.columns(3)
-        all_origins = run_query(conn, 'SELECT DISTINCT "ORIGIN" FROM flights WHERE "ORIGIN" IS NOT NULL ORDER BY 1').iloc[:,0].tolist()
-        all_dests = run_query(conn, 'SELECT DISTINCT "DEST" FROM flights WHERE "DEST" IS NOT NULL ORDER BY 1').iloc[:,0].tolist()
-        with rc1:
-            selected_orig=st.selectbox("Origin Airport",all_origins,index=all_origins.index('ORD') if 'ORD' in all_origins else 0,format_func=lambda x:f"{x} — {AIRPORT_CITY_NAMES.get(x,x)}")
-        with rc2:
-            selected_dest=st.selectbox("Destination Airport",all_dests,index=all_dests.index('LAX') if 'LAX' in all_dests else 0,format_func=lambda x:f"{x} — {AIRPORT_CITY_NAMES.get(x,x)}")
-        with rc3:
-            deep_airline=st.selectbox("Airline",["All Airlines"]+(airlines if airlines else []),format_func=lambda x:"All Airlines" if x=="All Airlines" else f"{x} — {AIRLINE_NAMES.get(str(x),'Carrier')}")
+        fc1, fc2, fc3 = st.columns([0.9, 1.15, 1.15])
 
-    route_sql="SELECT * FROM flights WHERE UPPER(\"ORIGIN\")=? AND UPPER(\"DEST\")=? AND \"FL_DATE\" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)"
-    route_params=[selected_orig.upper(),selected_dest.upper(),str(start_date),str(end_date)]
-    if deep_airline!="All Airlines":
-        route_sql+=f' AND "{airline_col_name}"=?'; route_params.append(deep_airline)
-    route_df=run_query(conn,route_sql,route_params)
+        with fc1:
+            deep_mode = st.radio(
+                "Flight Direction",
+                ["ARRIVALS", "DEPARTURES"],
+                horizontal=True,
+                format_func=lambda x: "Arrivals" if x == "ARRIVALS" else "Departures"
+            )
+
+        deep_where = where_arr if deep_mode == "ARRIVALS" else where_dep
+        deep_params = params_arr if deep_mode == "ARRIVALS" else params_dep
+
+        if deep_mode == "ARRIVALS":
+            route_options = run_query(
+                conn,
+                f'SELECT DISTINCT "ORIGIN" AS airport FROM flights {deep_where} AND "ORIGIN" IS NOT NULL ORDER BY airport',
+                deep_params
+            )["airport"].astype(str).tolist()
+            route_options = [x for x in route_options if x.upper() != "ORD"]
+            origin_options = route_options
+            if not origin_options:
+                st.warning("No inbound routes are available for the selected date range.")
+                st.stop()
+            with fc2:
+                selected_orig = st.selectbox(
+                    "Origin Airport", origin_options,
+                    format_func=lambda x: f"{x} — {AIRPORT_CITY_NAMES.get(x, x)}"
+                )
+            with fc3:
+                st.text_input("Destination Airport", value="ORD — Chicago O'Hare", disabled=True)
+            route_filter_sql = f'{deep_where} AND UPPER("ORIGIN") = ? AND UPPER("DEST") = \'ORD\''
+            route_filter_params = list(deep_params) + [selected_orig.upper()]
+            route_caption = f"{selected_orig} → ORD"
+        else:
+            route_options = run_query(
+                conn,
+                f'SELECT DISTINCT "DEST" AS airport FROM flights {deep_where} AND "DEST" IS NOT NULL ORDER BY airport',
+                deep_params
+            )["airport"].astype(str).tolist()
+            route_options = [x for x in route_options if x.upper() != "ORD"]
+            if not route_options:
+                st.warning("No outbound routes are available for the selected date range.")
+                st.stop()
+            with fc2:
+                st.text_input("Origin Airport", value="ORD — Chicago O'Hare", disabled=True)
+            with fc3:
+                selected_dest = st.selectbox(
+                    "Destination Airport", route_options,
+                    format_func=lambda x: f"{x} — {AIRPORT_CITY_NAMES.get(x, x)}"
+                )
+            route_filter_sql = f'{deep_where} AND UPPER("ORIGIN") = \'ORD\' AND UPPER("DEST") = ?'
+            route_filter_params = list(deep_params) + [selected_dest.upper()]
+            route_caption = f"ORD → {selected_dest}"
+
+        # Airline options are restricted to the selected route/date/direction.
+        relevant_airlines_df = run_query(
+            conn,
+            f'SELECT DISTINCT "{airline_col_name}" AS airline FROM flights {route_filter_sql} AND "{airline_col_name}" IS NOT NULL ORDER BY airline',
+            route_filter_params
+        )
+        relevant_airlines = relevant_airlines_df["airline"].dropna().astype(str).tolist()
+
+        airline_col_for_route = airline_col_name
+        # Put airline filter in a dedicated row so it remains clearly part of the filter section.
+        af1, af2 = st.columns([1, 3])
+        with af1:
+            deep_airline = st.selectbox(
+                "Airline",
+                ["All Airlines"] + relevant_airlines,
+                format_func=lambda x: "All Airlines" if x == "All Airlines" else f"{x} — {AIRLINE_NAMES.get(str(x), 'Carrier')}"
+            )
+        with af2:
+            st.markdown(
+                f"<div style='padding-top:28px;color:#64748B;font-size:.82rem;'>Showing <b>{route_caption}</b> • {len(relevant_airlines)} airline(s) available for this route and date range</div>",
+                unsafe_allow_html=True
+            )
+
+    route_sql = f'SELECT * FROM flights {route_filter_sql}'
+    route_params = list(route_filter_params)
+    if deep_airline != "All Airlines":
+        route_sql += f' AND "{airline_col_name}" = ?'
+        route_params.append(deep_airline)
+    route_df = run_query(conn, route_sql, route_params)
 
     if route_df.empty:
-        st.warning(f"No direct flight records found for {selected_orig} ➔ {selected_dest} in the selected date range.")
+        st.warning(f"No flight records found for {route_caption} in the selected date range.")
     else:
-        route_df.columns=[c.upper() for c in route_df.columns]
-        airline_col=get_airline_col(route_df.columns)
-        route_df["FL_DATE"]=pd.to_datetime(route_df["FL_DATE"],errors="coerce")
-        route_df["DEP_HOUR"]=(pd.to_numeric(route_df["CRS_DEP_TIME"],errors="coerce").fillna(1200).floordiv(100).clip(0,23).astype(int) if "CRS_DEP_TIME" in route_df else 12)
-        route_df["DEP_DELAY_NUM"]=pd.to_numeric(route_df.get("DEP_DELAY",0),errors="coerce").fillna(0)
-        route_df["ARR_DELAY_NUM"]=pd.to_numeric(route_df.get("ARR_DELAY",0),errors="coerce").fillna(0)
-        route_df["CANCELLED_NUM"]=pd.to_numeric(route_df.get("CANCELLED",0),errors="coerce").fillna(0)
-        route_df["DISTANCE_NUM"]=pd.to_numeric(route_df.get("DISTANCE",0),errors="coerce").fillna(0)
-        total=len(route_df); ota=(route_df.ARR_DELAY_NUM<=15).mean()*100; otd=(route_df.DEP_DELAY_NUM<=15).mean()*100
-        avg=route_df.ARR_DELAY_NUM.mean(); p90=route_df.ARR_DELAY_NUM.quantile(.9); cancel=route_df.CANCELLED_NUM.mean()*100
-        k1,k2,k3,k4,k5,k6=st.columns(6)
-        k1.metric("Route Flights",f"{total:,}"); k2.metric("On-Time Arrival",f"{ota:.1f}%"); k3.metric("On-Time Departure",f"{otd:.1f}%")
-        k4.metric("Avg Arrival Delay",f"{avg:.1f} min"); k5.metric("P90 Arrival Delay",f"{p90:.1f} min"); k6.metric("Cancellation Rate",f"{cancel:.1f}%")
+        route_df.columns = [c.upper() for c in route_df.columns]
+        airline_col = get_airline_col(route_df.columns)
+        route_df["FL_DATE"] = pd.to_datetime(route_df["FL_DATE"], errors="coerce")
+        route_df["DEP_HOUR"] = (pd.to_numeric(route_df["CRS_DEP_TIME"], errors="coerce").fillna(1200).floordiv(100).clip(0,23).astype(int) if "CRS_DEP_TIME" in route_df else 12)
+        route_df["DEP_DELAY_NUM"] = pd.to_numeric(route_df.get("DEP_DELAY",0), errors="coerce").fillna(0)
+        route_df["ARR_DELAY_NUM"] = pd.to_numeric(route_df.get("ARR_DELAY",0), errors="coerce").fillna(0)
+        route_df["CANCELLED_NUM"] = pd.to_numeric(route_df.get("CANCELLED",0), errors="coerce").fillna(0)
+        route_df["DISTANCE_NUM"] = pd.to_numeric(route_df.get("DISTANCE",0), errors="coerce").fillna(0)
 
-        a,b=st.columns([1.15,1])
+        total = len(route_df)
+        ota = (route_df.ARR_DELAY_NUM <= 15).mean() * 100
+        otd = (route_df.DEP_DELAY_NUM <= 15).mean() * 100
+        avg = route_df.ARR_DELAY_NUM.mean()
+        p90 = route_df.ARR_DELAY_NUM.quantile(.9)
+        cancel = route_df.CANCELLED_NUM.mean() * 100
+        k1,k2,k3,k4,k5,k6 = st.columns(6)
+        k1.metric("Route Flights", f"{total:,}")
+        k2.metric("On-Time Arrival", f"{ota:.1f}%")
+        k3.metric("On-Time Departure", f"{otd:.1f}%")
+        k4.metric("Avg Arrival Delay", f"{avg:.1f} min")
+        k5.metric("P90 Arrival Delay", f"{p90:.1f} min")
+        k6.metric("Cancellation Rate", f"{cancel:.1f}%")
+
+        a,b = st.columns([1.15,1])
         with a:
             with st.container(border=True):
                 st.markdown("### 📊 Delay Distribution")
-                fig=go.Figure(go.Histogram(x=route_df.ARR_DELAY_NUM,nbinsx=30,marker_color="#0066CC",opacity=.85))
-                fig.add_vline(x=15,line_dash="dash",line_color="#D97706",annotation_text="15 min")
-                fig.add_vline(x=float(route_df.ARR_DELAY_NUM.median()),line_dash="dot",line_color="#0F172A")
-                fig=apply_white_chart_theme(fig); fig.update_layout(height=300,margin=dict(l=10,r=10,t=10,b=10),xaxis_title="Arrival Delay (minutes)",yaxis_title="Flights")
-                st.plotly_chart(fig,width='stretch')
+                fig = go.Figure(go.Histogram(x=route_df.ARR_DELAY_NUM, nbinsx=30, marker_color="#0066CC", opacity=.85))
+                fig.add_vline(x=15, line_dash="dash", line_color="#D97706", annotation_text="15 min")
+                fig.add_vline(x=float(route_df.ARR_DELAY_NUM.median()), line_dash="dot", line_color="#0F172A")
+                fig = apply_white_chart_theme(fig)
+                fig.update_layout(height=300, margin=dict(l=10,r=10,t=10,b=10), xaxis_title="Arrival Delay (minutes)", yaxis_title="Flights")
+                st.plotly_chart(fig, width='stretch')
         with b:
             with st.container(border=True):
                 st.markdown("### ⏰ Departure-Time Risk Curve")
-                h=route_df.groupby("DEP_HOUR").agg(Flights=("DEP_HOUR","size"),AvgDelay=("ARR_DELAY_NUM","mean")).reset_index()
-                fig=go.Figure([go.Bar(x=h.DEP_HOUR,y=h.Flights,name="Flights",marker_color="#CBD5E1",yaxis="y"),go.Scatter(x=h.DEP_HOUR,y=h.AvgDelay,name="Avg arrival delay",mode="lines+markers",line=dict(color="#0066CC",width=3),yaxis="y2")])
-                fig=apply_white_chart_theme(fig); fig.update_layout(height=300,margin=dict(l=10,r=10,t=10,b=10),xaxis=dict(title="Scheduled Departure Hour",dtick=1),yaxis=dict(title="Flights"),yaxis2=dict(title="Avg Delay (min)",overlaying="y",side="right",showgrid=False),legend=dict(orientation="h",y=1.08,x=0))
+                h = route_df.groupby("DEP_HOUR").agg(Flights=("DEP_HOUR","size"), AvgDelay=("ARR_DELAY_NUM","mean")).reset_index()
+                fig = go.Figure([
+                    go.Bar(x=h.DEP_HOUR,y=h.Flights,name="Flights",marker_color="#CBD5E1",yaxis="y"),
+                    go.Scatter(x=h.DEP_HOUR,y=h.AvgDelay,name="Avg arrival delay",mode="lines+markers",line=dict(color="#0066CC",width=3),yaxis="y2")
+                ])
+                fig = apply_white_chart_theme(fig)
+                fig.update_layout(height=300,margin=dict(l=10,r=10,t=10,b=10),xaxis=dict(title="Scheduled Departure Hour",dtick=1,showline=False),yaxis=dict(title="Flights",showline=False),yaxis2=dict(title="Avg Delay (min)",overlaying="y",side="right",showgrid=False,showline=False),legend=dict(orientation="h",y=1.08,x=0))
                 st.plotly_chart(fig,width='stretch')
 
-        a,b=st.columns([1.15,1])
+        a,b = st.columns([1.15,1])
         with a:
             with st.container(border=True):
                 st.markdown("### 📈 Monthly Reliability")
-                m=route_df.dropna(subset=["FL_DATE"]).groupby(route_df["FL_DATE"].dt.to_period("M")).agg(Flights=("FL_DATE","size"),OnTime=("ARR_DELAY_NUM",lambda x:(x<=15).mean()*100),AvgDelay=("ARR_DELAY_NUM","mean")).reset_index(); m["Month"]=m.FL_DATE.astype(str)
-                fig=go.Figure([go.Scatter(x=m.Month,y=m.OnTime,name="On-Time %",mode="lines+markers",line=dict(color="#0066CC",width=3)),go.Scatter(x=m.Month,y=m.AvgDelay,name="Avg Delay",mode="lines+markers",line=dict(color="#64748B",width=2,dash="dot"))])
-                fig=apply_white_chart_theme(fig); fig.update_layout(height=290,margin=dict(l=10,r=10,t=10,b=10),yaxis_title="Rate / Minutes",legend=dict(orientation="h",y=1.08,x=0)); st.plotly_chart(fig,width='stretch')
+                m = route_df.dropna(subset=["FL_DATE"]).groupby(route_df["FL_DATE"].dt.to_period("M")).agg(Flights=("FL_DATE","size"),OnTime=("ARR_DELAY_NUM",lambda x:(x<=15).mean()*100),AvgDelay=("ARR_DELAY_NUM","mean")).reset_index()
+                m["Month"] = m.FL_DATE.astype(str)
+                fig = go.Figure([
+                    go.Scatter(x=m.Month,y=m.OnTime,name="On-Time %",mode="lines+markers",line=dict(color="#0066CC",width=3)),
+                    go.Scatter(x=m.Month,y=m.AvgDelay,name="Avg Delay",mode="lines+markers",line=dict(color="#64748B",width=2,dash="dot"))
+                ])
+                fig = apply_white_chart_theme(fig); fig.update_layout(height=290,margin=dict(l=10,r=10,t=10,b=10),yaxis_title="Rate / Minutes",legend=dict(orientation="h",y=1.08,x=0)); st.plotly_chart(fig,width='stretch')
         with b:
             with st.container(border=True):
                 st.markdown("### 🏷️ Carrier Reliability")
-                cs=route_df.groupby(airline_col).agg(Flights=(airline_col,"size"),OnTime=("ARR_DELAY_NUM",lambda x:(x<=15).mean()*100),AvgDelay=("ARR_DELAY_NUM","mean"),P90Delay=("ARR_DELAY_NUM",lambda x:x.quantile(.9))).reset_index(); cs["Carrier"]=cs[airline_col].astype(str).map(lambda x:AIRLINE_NAMES.get(x,x))
-                fig=px.bar(cs.sort_values("OnTime"),x="OnTime",y="Carrier",orientation="h",text="OnTime"); fig.update_traces(marker_color="#0066CC",texttemplate="%{text:.1f}%",textposition="outside",width=.64); fig=apply_white_chart_theme(fig); fig.update_layout(height=290,margin=dict(l=10,r=35,t=10,b=10),xaxis_title="On-Time Arrival %",yaxis_title=""); st.plotly_chart(fig,width='stretch')
+                cs = route_df.groupby(airline_col).agg(Flights=(airline_col,"size"),OnTime=("ARR_DELAY_NUM",lambda x:(x<=15).mean()*100),AvgDelay=("ARR_DELAY_NUM","mean"),P90Delay=("ARR_DELAY_NUM",lambda x:x.quantile(.9))).reset_index()
+                cs["Carrier"] = cs[airline_col].astype(str).map(lambda x:AIRLINE_NAMES.get(x,x))
+                fig = px.bar(cs.sort_values("OnTime"),x="OnTime",y="Carrier",orientation="h",text="OnTime")
+                fig.update_traces(marker_color="#0066CC",texttemplate="%{text:.1f}%",textposition="outside",width=.64)
+                fig = apply_white_chart_theme(fig); fig.update_layout(height=290,margin=dict(l=10,r=35,t=10,b=10),xaxis_title="On-Time Arrival %",yaxis_title=""); st.plotly_chart(fig,width='stretch')
 
-        a,b=st.columns([1,1.15])
+        a,b = st.columns([1,1.15])
         with a:
             with st.container(border=True):
                 st.markdown("### 🩺 Delay Cause Mix")
-                cmap={"DELAY_DUE_CARRIER":"Carrier","DELAY_DUE_WEATHER":"Weather","DELAY_DUE_NAS":"NAS","DELAY_DUE_SECURITY":"Security","DELAY_DUE_LATE_AIRCRAFT":"Late Aircraft"}; cols=[c for c in cmap if c in route_df]
+                cmap={"DELAY_DUE_CARRIER":"Carrier","DELAY_DUE_WEATHER":"Weather","DELAY_DUE_NAS":"NAS","DELAY_DUE_SECURITY":"Security","DELAY_DUE_LATE_AIRCRAFT":"Late Aircraft"}
+                cols=[c for c in cmap if c in route_df]
                 if cols:
-                    cd=pd.DataFrame({"Cause":[cmap[c] for c in cols],"Minutes":[pd.to_numeric(route_df[c],errors="coerce").fillna(0).sum() for c in cols]}); fig=px.bar(cd.sort_values("Minutes"),x="Minutes",y="Cause",orientation="h",text_auto=".0f"); fig.update_traces(marker_color="#0066CC",width=.64); fig=apply_white_chart_theme(fig); fig.update_layout(height=280,margin=dict(l=10,r=25,t=10,b=10),xaxis_title="Total Delay Minutes",yaxis_title=""); st.plotly_chart(fig,width='stretch')
+                    cd=pd.DataFrame({"Cause":[cmap[c] for c in cols],"Minutes":[pd.to_numeric(route_df[c],errors="coerce").fillna(0).sum() for c in cols]})
+                    fig=px.bar(cd.sort_values("Minutes"),x="Minutes",y="Cause",orientation="h",text_auto=".0f"); fig.update_traces(marker_color="#0066CC",width=.64); fig=apply_white_chart_theme(fig); fig.update_layout(height=300,margin=dict(l=10,r=25,t=10,b=10),xaxis_title="Total Delay Minutes",yaxis_title=""); st.plotly_chart(fig,width='stretch')
                 else: st.info("Delay-cause fields are not available for this route.")
         with b:
             with st.container(border=True):
                 st.markdown("### 🔬 Delay vs. Distance")
                 scatter_df=route_df[["DISTANCE_NUM","ARR_DELAY_NUM"]].replace([np.inf,-np.inf],np.nan).dropna()
-                fig=go.Figure()
-                fig.add_trace(go.Scatter(x=scatter_df["DISTANCE_NUM"],y=scatter_df["ARR_DELAY_NUM"],mode="markers",name="Flights",marker=dict(size=6,color="#0066CC",opacity=.55),hovertemplate="Distance: %{x:,.0f} mi<br>Arrival delay: %{y:.1f} min<extra></extra>"))
+                fig=go.Figure(); fig.add_trace(go.Scatter(x=scatter_df["DISTANCE_NUM"],y=scatter_df["ARR_DELAY_NUM"],mode="markers",name="Flights",marker=dict(size=6,color="#0066CC",opacity=.55),hovertemplate="Distance: %{x:,.0f} mi<br>Arrival delay: %{y:.1f} min<extra></extra>"))
                 if len(scatter_df)>=10 and scatter_df["DISTANCE_NUM"].nunique()>1:
-                    x=scatter_df["DISTANCE_NUM"].to_numpy(dtype=float); y=scatter_df["ARR_DELAY_NUM"].to_numpy(dtype=float)
-                    slope,intercept=np.polyfit(x,y,1); xline=np.linspace(x.min(),x.max(),100)
+                    x=scatter_df["DISTANCE_NUM"].to_numpy(dtype=float); y=scatter_df["ARR_DELAY_NUM"].to_numpy(dtype=float); slope,intercept=np.polyfit(x,y,1); xline=np.linspace(x.min(),x.max(),100)
                     fig.add_trace(go.Scatter(x=xline,y=slope*xline+intercept,mode="lines",name="Linear trend",line=dict(color="#0F172A",width=2,dash="dash"),hoverinfo="skip"))
-                fig=apply_white_chart_theme(fig); fig.update_layout(height=280,margin=dict(l=10,r=10,t=10,b=10),xaxis_title="Distance (miles)",yaxis_title="Arrival Delay (minutes)",legend=dict(orientation="h",y=1.08,x=0)); st.plotly_chart(fig,width='stretch')
+                fig=apply_white_chart_theme(fig); fig.update_layout(height=300,margin=dict(l=10,r=10,t=10,b=10),xaxis_title="Distance (miles)",yaxis_title="Arrival Delay (minutes)",legend=dict(orientation="h",y=1.08,x=0)); st.plotly_chart(fig,width='stretch')
 
         with st.container(border=True):
             st.markdown("### 🧠 Advanced Route Risk Analytics")
             r1,r2,r3=st.columns(3)
             with r1:
-                rh=route_df.groupby("DEP_HOUR").agg(Flights=("DEP_HOUR","size"),DelayRate=("ARR_DELAY_NUM",lambda x:(x>15).mean()*100)).reset_index(); prior=max(20,int(total*.1)); base=(route_df.ARR_DELAY_NUM>15).mean()*100; rh["SmoothedRisk"]=(rh.Flights*rh.DelayRate+prior*base)/(rh.Flights+prior); fig=px.bar(rh.sort_values("SmoothedRisk"),x="SmoothedRisk",y="DEP_HOUR",orientation="h",text="SmoothedRisk"); fig.update_traces(marker_color="#0066CC",texttemplate="%{text:.1f}%",textposition="outside",width=.64); fig=apply_white_chart_theme(fig); fig.update_layout(height=280,margin=dict(l=10,r=35,t=10,b=10),xaxis_title="Smoothed Delay Risk %",yaxis_title="Hour"); st.plotly_chart(fig,width='stretch')
+                rh=route_df.groupby("DEP_HOUR").agg(Flights=("DEP_HOUR","size"),DelayRate=("ARR_DELAY_NUM",lambda x:(x>15).mean()*100)).reset_index(); prior=max(20,int(total*.1)); base=(route_df.ARR_DELAY_NUM>15).mean()*100; rh["SmoothedRisk"]=(rh.Flights*rh.DelayRate+prior*base)/(rh.Flights+prior)
+                fig=px.bar(rh.sort_values("SmoothedRisk"),x="SmoothedRisk",y="DEP_HOUR",orientation="h",text="SmoothedRisk"); fig.update_traces(marker_color="#0066CC",texttemplate="%{text:.1f}%",textposition="outside",width=.64); fig=apply_white_chart_theme(fig); fig.update_layout(height=280,margin=dict(l=10,r=35,t=10,b=10),xaxis_title="Smoothed Delay Risk %",yaxis_title="Hour"); st.plotly_chart(fig,width='stretch')
             with r2:
                 ci=cs.copy(); z=1.96; ci["p"]=ci.OnTime/100; ci["se"]=np.sqrt((ci.p*(1-ci.p))/ci.Flights.clip(lower=1)); ci["Lower"]=(ci.p-z*ci.se).clip(lower=0)*100; ci["Upper"]=(ci.p+z*ci.se).clip(upper=1)*100; fig=go.Figure()
                 for _,row in ci.sort_values("OnTime").iterrows():
-                    fig.add_trace(go.Scatter(x=[row.Lower,row.Upper],y=[row.Carrier,row.Carrier],mode="lines",line=dict(color="#94A3B8",width=6),showlegend=False)); fig.add_trace(go.Scatter(x=[row.OnTime],y=[row.Carrier],mode="markers",marker=dict(color="#0066CC",size=9),showlegend=False))
+                    fig.add_trace(go.Scatter(x=[row.Lower,row.Upper],y=[row.Carrier,row.Carrier],mode="lines",line=dict(color="#94A3B8",width=6),showlegend=False)); fig.add_trace(go.Scatter(x=[row.OnTime],y=[row.Carrier],mode="markers",marker=dict(color="#0066CC",size=9),showlegend=False,hovertemplate=f"{row.Carrier}<br>On-time: {row.OnTime:.1f}%<br>Approx. 95% interval: {row.Lower:.1f}%–{row.Upper:.1f}%<extra></extra>"))
                 fig=apply_white_chart_theme(fig); fig.update_layout(height=280,margin=dict(l=10,r=10,t=10,b=10),xaxis_title="On-Time Arrival %",yaxis_title=""); st.plotly_chart(fig,width='stretch')
             with r3:
                 pdly=route_df.loc[route_df.ARR_DELAY_NUM>0,"ARR_DELAY_NUM"].sort_values(ascending=False).reset_index(drop=True)
