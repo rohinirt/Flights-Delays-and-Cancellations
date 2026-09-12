@@ -108,6 +108,18 @@ st.markdown("""
         box-shadow: 0 1px 3px rgba(15,23,42,0.05) !important;
     }
 
+    /* Plotly canvas: no inner border. The surrounding white card remains. */
+    div[data-testid="stPlotlyChart"],
+    div[data-testid="stPlotlyChart"] > div,
+    div[data-testid="stPlotlyChart"] .js-plotly-plot,
+    div[data-testid="stPlotlyChart"] .plot-container,
+    div[data-testid="stPlotlyChart"] .svg-container,
+    div[data-testid="stPlotlyChart"] .main-svg {
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+    }
+
     div[data-testid="stSegmentedControl"] {
         background-color: #F1F5F9 !important;
         border-radius: 6px !important;
@@ -201,14 +213,14 @@ def apply_white_chart_theme(fig):
         font=dict(color="#0f172a", family="sans-serif"),
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#FFFFFF",
-        title=dict(font=dict(color="#0f172a", size=14, weight="bold")),
+        title=dict(text="", font=dict(color="#0f172a", size=14, weight="bold")),
         xaxis=dict(
-            title=dict(font=dict(color="#0f172a")),
+            title=dict(text="", font=dict(color="#0f172a")),
             tickfont=dict(color="#0f172a"), gridcolor="#f1f5f9",
             showline=False, mirror=False, zeroline=False, linecolor="rgba(0,0,0,0)"
         ),
         yaxis=dict(
-            title=dict(font=dict(color="#0f172a")),
+            title=dict(text="", font=dict(color="#0f172a")),
             tickfont=dict(color="#0f172a"), gridcolor="#f1f5f9",
             showline=False, mirror=False, zeroline=False, linecolor="rgba(0,0,0,0)"
         ),
@@ -1025,19 +1037,24 @@ elif page == "Flight Deep-Dive":
     st.title("🔎 Route & Flight Intelligence")
     st.caption("Route-level operational intelligence, reliability patterns, delay drivers, traffic patterns, and advanced risk analytics.")
 
-    # The source dataset used by this dashboard is intentionally filtered to
-    # ORD arrivals and ORD departures. Therefore Deep-Dive must use the same
-    # scope instead of offering arbitrary airport-to-airport combinations.
+    # The dashboard dataset is intentionally scoped to ORD arrivals and ORD
+    # departures. Deep-Dive uses exactly the same scope.
     with st.container(border=True):
-        st.markdown("<div style='font-weight:700;color:#0F172A;font-size:1rem;margin-bottom:8px;'>🎯 Flight Corridor</div>", unsafe_allow_html=True)
-        fc1, fc2, fc3 = st.columns([0.9, 1.15, 1.15])
+        st.markdown(
+            "<div style='font-weight:700;color:#0F172A;font-size:1rem;margin-bottom:8px;'>🎯 Flight Corridor</div>",
+            unsafe_allow_html=True
+        )
+
+        # ALL filters are in one horizontal row:
+        # Direction | Origin | Destination | Airline
+        fc1, fc2, fc3, fc4 = st.columns([0.95, 1.15, 1.15, 1.35])
 
         with fc1:
-            deep_mode = st.radio(
+            deep_mode = st.selectbox(
                 "Flight Direction",
                 ["ARRIVALS", "DEPARTURES"],
-                horizontal=True,
-                format_func=lambda x: "Arrivals" if x == "ARRIVALS" else "Departures"
+                format_func=lambda x:
+                    "Arrivals" if x == "ARRIVALS" else "Departures"
             )
 
         deep_where = where_arr if deep_mode == "ARRIVALS" else where_dep
@@ -1046,73 +1063,120 @@ elif page == "Flight Deep-Dive":
         if deep_mode == "ARRIVALS":
             route_options = run_query(
                 conn,
-                f'SELECT DISTINCT "ORIGIN" AS airport FROM flights {deep_where} AND "ORIGIN" IS NOT NULL ORDER BY airport',
+                f'''SELECT DISTINCT "ORIGIN" AS airport
+                    FROM flights {deep_where}
+                    AND "ORIGIN" IS NOT NULL
+                    AND UPPER("ORIGIN") <> 'ORD'
+                    ORDER BY airport''',
                 deep_params
             )["airport"].astype(str).tolist()
-            route_options = [x for x in route_options if x.upper() != "ORD"]
-            origin_options = route_options
-            if not origin_options:
+
+            if not route_options:
                 st.warning("No inbound routes are available for the selected date range.")
                 st.stop()
+
             with fc2:
                 selected_orig = st.selectbox(
-                    "Origin Airport", origin_options,
-                    format_func=lambda x: f"{x} — {AIRPORT_CITY_NAMES.get(x, x)}"
+                    "Origin Airport",
+                    route_options,
+                    format_func=lambda x:
+                        f"{x} — {AIRPORT_CITY_NAMES.get(x, x)}"
                 )
+
             with fc3:
-                st.text_input("Destination Airport", value="ORD — Chicago O'Hare", disabled=True)
-            route_filter_sql = f'{deep_where} AND UPPER("ORIGIN") = ? AND UPPER("DEST") = \'ORD\''
+                st.selectbox(
+                    "Destination Airport",
+                    ["ORD — Chicago O'Hare"],
+                    disabled=True
+                )
+
+            route_filter_sql = (
+                f'''{deep_where}
+                    AND UPPER("ORIGIN") = ?
+                    AND UPPER("DEST") = 'ORD' '''
+            )
             route_filter_params = list(deep_params) + [selected_orig.upper()]
             route_caption = f"{selected_orig} → ORD"
+
         else:
             route_options = run_query(
                 conn,
-                f'SELECT DISTINCT "DEST" AS airport FROM flights {deep_where} AND "DEST" IS NOT NULL ORDER BY airport',
+                f'''SELECT DISTINCT "DEST" AS airport
+                    FROM flights {deep_where}
+                    AND "DEST" IS NOT NULL
+                    AND UPPER("DEST") <> 'ORD'
+                    ORDER BY airport''',
                 deep_params
             )["airport"].astype(str).tolist()
-            route_options = [x for x in route_options if x.upper() != "ORD"]
+
             if not route_options:
                 st.warning("No outbound routes are available for the selected date range.")
                 st.stop()
+
             with fc2:
-                st.text_input("Origin Airport", value="ORD — Chicago O'Hare", disabled=True)
+                st.selectbox(
+                    "Origin Airport",
+                    ["ORD — Chicago O'Hare"],
+                    disabled=True
+                )
+
             with fc3:
                 selected_dest = st.selectbox(
-                    "Destination Airport", route_options,
-                    format_func=lambda x: f"{x} — {AIRPORT_CITY_NAMES.get(x, x)}"
+                    "Destination Airport",
+                    route_options,
+                    format_func=lambda x:
+                        f"{x} — {AIRPORT_CITY_NAMES.get(x, x)}"
                 )
-            route_filter_sql = f'{deep_where} AND UPPER("ORIGIN") = \'ORD\' AND UPPER("DEST") = ?'
+
+            route_filter_sql = (
+                f'''{deep_where}
+                    AND UPPER("ORIGIN") = 'ORD'
+                    AND UPPER("DEST") = ? '''
+            )
             route_filter_params = list(deep_params) + [selected_dest.upper()]
             route_caption = f"ORD → {selected_dest}"
 
-        # Airline options are restricted to the selected route/date/direction.
+        # Only airlines that actually operate the selected route in the
+        # selected date range are shown.
         relevant_airlines_df = run_query(
             conn,
-            f'SELECT DISTINCT "{airline_col_name}" AS airline FROM flights {route_filter_sql} AND "{airline_col_name}" IS NOT NULL ORDER BY airline',
+            f'''SELECT DISTINCT "{airline_col_name}" AS airline
+                FROM flights {route_filter_sql}
+                AND "{airline_col_name}" IS NOT NULL
+                ORDER BY airline''',
             route_filter_params
         )
-        relevant_airlines = relevant_airlines_df["airline"].dropna().astype(str).tolist()
+        relevant_airlines = (
+            relevant_airlines_df["airline"]
+            .dropna()
+            .astype(str)
+            .tolist()
+        )
 
-        airline_col_for_route = airline_col_name
-        # Put airline filter in a dedicated row so it remains clearly part of the filter section.
-        af1, af2 = st.columns([1, 3])
-        with af1:
+        with fc4:
             deep_airline = st.selectbox(
                 "Airline",
                 ["All Airlines"] + relevant_airlines,
-                format_func=lambda x: "All Airlines" if x == "All Airlines" else f"{x} — {AIRLINE_NAMES.get(str(x), 'Carrier')}"
+                format_func=lambda x:
+                    "All Airlines"
+                    if x == "All Airlines"
+                    else f"{x} — {AIRLINE_NAMES.get(str(x), 'Carrier')}"
             )
-        with af2:
-            st.markdown(
-                f"<div style='padding-top:28px;color:#64748B;font-size:.82rem;'>Showing <b>{route_caption}</b> • {len(relevant_airlines)} airline(s) available for this route and date range</div>",
-                unsafe_allow_html=True
-            )
+
+        st.markdown(
+            f"<div style='font-size:.76rem;color:#64748B;margin-top:-2px;'>"
+            f"Selected route: <b>{route_caption}</b> &nbsp;•&nbsp; "
+            f"{len(relevant_airlines)} airline(s) available</div>",
+            unsafe_allow_html=True
+        )
 
     route_sql = f'SELECT * FROM flights {route_filter_sql}'
     route_params = list(route_filter_params)
+
     if deep_airline != "All Airlines":
         route_sql += f' AND "{airline_col_name}" = ?'
         route_params.append(deep_airline)
+
     route_df = run_query(conn, route_sql, route_params)
 
     if route_df.empty:
