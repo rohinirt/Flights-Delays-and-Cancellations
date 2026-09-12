@@ -298,7 +298,7 @@ def create_airline_connectivity_barchart(_conn, mode="ARRIVALS", start_date=None
         fig = go.Figure()
         msg = f"Connectivity data unavailable: {connectivity_error}" if connectivity_error else "No connectivity data for the selected filters"
         fig.add_annotation(text=msg, showarrow=False)
-        fig.update_layout(height=380, paper_bgcolor="#FFFFFF")
+        fig.update_layout(height=280, paper_bgcolor="#FFFFFF")
         return fig
 
     df['airline_name'] = df['airline'].apply(lambda x: AIRLINE_NAMES.get(str(x), str(x)))
