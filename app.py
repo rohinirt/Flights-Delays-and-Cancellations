@@ -64,6 +64,11 @@ st.markdown("""
 
     .stApp { background-color: #F8FAFC !important; }
 
+    /* Single source of truth for the "card" look. Every st.container(border=True)
+       gets exactly ONE border, whether it sits at the page level or inside a
+       st.columns() cell. Do NOT add any other rule elsewhere that also puts a
+       border/box-shadow on a stColumn's child div - that's what caused the
+       double-border effect previously. */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #FFFFFF !important;
         border-radius: 8px !important;
@@ -73,13 +78,10 @@ st.markdown("""
         margin-bottom: 6px !important;
     }
 
-    div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] {
-        border: none !important;
-        box-shadow: none !important;
-        padding: 0px !important;
-    }
-
-    div[data-testid="stColumn"] > div {
+    /* Plain (non-bordered) columns, e.g. the KPI strip, still get a light card
+       treatment - but only when they don't already contain a bordered
+       container, so nothing is ever double-boxed. */
+    div[data-testid="stColumn"] > div:not(:has(div[data-testid="stVerticalBlockBorderWrapper"])) {
         background-color: #FFFFFF !important;
         border: 1px solid #CBD5E1 !important;
         border-radius: 8px !important;
@@ -505,7 +507,10 @@ try:
 except Exception:
     airlines = []
 
-selected_airline = st.sidebar.multiselect("Select Airline", options=airlines, default=[])
+selected_airline = st.sidebar.multiselect("Select Airline", options=airlines, default=[], help="Leave empty to include all airlines")
+
+if selected_airline:
+    st.sidebar.caption(f"Filtering {len(selected_airline)} of {len(airlines)} airlines")
 
 # Base SQL Filters
 where_arr = "WHERE UPPER(\"DEST\") = 'ORD'"
