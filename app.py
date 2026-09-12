@@ -102,10 +102,10 @@ st.markdown("""
        container, so nothing is ever double-boxed. */
     div[data-testid="stColumn"] > div:not(:has(div[data-testid="stVerticalBlockBorderWrapper"])) {
         background-color: #FFFFFF !important;
-        border: none !important;
+        border: 1px solid #E2E8F0 !important;
         border-radius: 10px !important;
-        padding: 6px 4px 2px 4px !important;
-        box-shadow: 0 1px 3px rgba(15,23,42,0.06) !important;
+        padding: 6px 6px 2px 6px !important;
+        box-shadow: 0 1px 3px rgba(15,23,42,0.05) !important;
     }
 
     div[data-testid="stSegmentedControl"] {
@@ -992,7 +992,7 @@ elif page == "🔮 Delay Predictor":
 
 # ==================== FLIGHT DEEP-DIVE PAGE ====================
 elif page == "Flight Deep-Dive":
-    st.title("🔎 Flight Deep-Dive")
+    st.title("🔎 Route & Flight Intelligence")
     st.caption("Route-level operational intelligence, reliability patterns, delay drivers, traffic patterns, and advanced risk analytics.")
 
     with st.container(border=True):
@@ -1071,27 +1071,14 @@ elif page == "Flight Deep-Dive":
         with b:
             with st.container(border=True):
                 st.markdown("### 🔬 Delay vs. Distance")
-                fig=px.scatter(route_df,x="DISTANCE_NUM",y="ARR_DELAY_NUM",opacity=.55)
-
-                fig.update_traces(marker=dict(size=6,color="#0066CC"))
-
-                scatter_xy=route_df[["DISTANCE_NUM","ARR_DELAY_NUM"]].replace([np.inf,-np.inf],np.nan).dropna()
-
-                if len(scatter_xy)>=10 and scatter_xy["DISTANCE_NUM"].nunique()>=2:
-
-                    x_fit=scatter_xy["DISTANCE_NUM"].to_numpy(dtype=float); y_fit=scatter_xy["ARR_DELAY_NUM"].to_numpy(dtype=float)
-
-                    slope,intercept=np.polyfit(x_fit,y_fit,1)
-
-                    x_line=np.linspace(x_fit.min(),x_fit.max(),100)
-
-                    fig.add_trace(go.Scatter(x=x_line,y=slope*x_line+intercept,mode="lines",name="Trend",line=dict(color="#0F172A",width=2,dash="dash")))
-
-                fig=apply_white_chart_theme(fig)
-
-                fig.update_layout(height=280,margin=dict(l=10,r=10,t=10,b=10),xaxis_title="Distance (miles)",yaxis_title="Arrival Delay (minutes)")
-
-                st.plotly_chart(fig,width='stretch')
+                scatter_df=route_df[["DISTANCE_NUM","ARR_DELAY_NUM"]].replace([np.inf,-np.inf],np.nan).dropna()
+                fig=go.Figure()
+                fig.add_trace(go.Scatter(x=scatter_df["DISTANCE_NUM"],y=scatter_df["ARR_DELAY_NUM"],mode="markers",name="Flights",marker=dict(size=6,color="#0066CC",opacity=.55),hovertemplate="Distance: %{x:,.0f} mi<br>Arrival delay: %{y:.1f} min<extra></extra>"))
+                if len(scatter_df)>=10 and scatter_df["DISTANCE_NUM"].nunique()>1:
+                    x=scatter_df["DISTANCE_NUM"].to_numpy(dtype=float); y=scatter_df["ARR_DELAY_NUM"].to_numpy(dtype=float)
+                    slope,intercept=np.polyfit(x,y,1); xline=np.linspace(x.min(),x.max(),100)
+                    fig.add_trace(go.Scatter(x=xline,y=slope*xline+intercept,mode="lines",name="Linear trend",line=dict(color="#0F172A",width=2,dash="dash"),hoverinfo="skip"))
+                fig=apply_white_chart_theme(fig); fig.update_layout(height=280,margin=dict(l=10,r=10,t=10,b=10),xaxis_title="Distance (miles)",yaxis_title="Arrival Delay (minutes)",legend=dict(orientation="h",y=1.08,x=0)); st.plotly_chart(fig,width='stretch')
 
         with st.container(border=True):
             st.markdown("### 🧠 Advanced Route Risk Analytics")
