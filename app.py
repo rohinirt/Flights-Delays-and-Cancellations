@@ -427,7 +427,7 @@ st.markdown("""
     }
 
 
-    /* Route Performance & Risk (4th page) chart titles: +4pt. */
+    /* Route Performance (4th page) chart titles: +4pt. */
     .deep-dive-chart-title {
         font-size: 1.05rem !important;
         font-weight: 700 !important;
@@ -441,6 +441,89 @@ st.markdown("""
         line-height: 1.15 !important;
         margin: 0 0 3px 0 !important;
         padding: 0 !important;
+    }
+
+
+    /* ===== SIDEBAR FINAL FIX ===== */
+    section[data-testid="stSidebar"] .sidebar-header-fix {
+        display: block !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        margin: 0 0 0.55rem 0 !important;
+        padding: 0 !important;
+        line-height: 1.2 !important;
+    }
+    section[data-testid="stSidebar"] .sidebar-header-fix .sidebar-title {
+        display: block !important;
+        font-size: 1.18rem !important;
+        font-weight: 700 !important;
+        line-height: 1.2 !important;
+        margin: 0 0 0.28rem 0 !important;
+        padding: 0 !important;
+        color: #FFFFFF !important;
+    }
+    section[data-testid="stSidebar"] .sidebar-header-fix .sidebar-subtitle {
+        display: block !important;
+        font-size: 0.76rem !important;
+        font-weight: 500 !important;
+        line-height: 1.25 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        color: #AEB9C8 !important;
+    }
+    section[data-testid="stSidebar"] .sidebar-header-fix p {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Compact, narrower filter controls. */
+    section[data-testid="stSidebar"] [data-testid="stSelectbox"],
+    section[data-testid="stSidebar"] [data-testid="stMultiSelect"],
+    section[data-testid="stSidebar"] [data-testid="stDateInput"] {
+        width: 92% !important;
+        max-width: 92% !important;
+        margin-right: auto !important;
+        margin-bottom: 0.18rem !important;
+    }
+    section[data-testid="stSidebar"] [data-baseweb="select"] > div,
+    section[data-testid="stSidebar"] [data-testid="stDateInput"] input {
+        background: #F5F8FC !important;
+        color: #10233F !important;
+        border: 1px solid #91A7C0 !important;
+        border-radius: 7px !important;
+        opacity: 1 !important;
+    }
+    section[data-testid="stSidebar"] [data-baseweb="select"] span,
+    section[data-testid="stSidebar"] [data-baseweb="select"] input {
+        color: #10233F !important;
+        opacity: 1 !important;
+    }
+    section[data-testid="stSidebar"] [data-baseweb="tag"] {
+        background: #DCE8F5 !important;
+        color: #10233F !important;
+        border: 1px solid #9CB3CB !important;
+    }
+    section[data-testid="stSidebar"] [data-baseweb="tag"] span {
+        color: #10233F !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stDateInput"] input::placeholder {
+        color: #65758A !important;
+        opacity: 1 !important;
+    }
+
+    /* Filter labels stay white and readable. */
+    section[data-testid="stSidebar"] [data-testid="stSelectbox"] label,
+    section[data-testid="stSidebar"] [data-testid="stMultiSelect"] label,
+    section[data-testid="stSidebar"] [data-testid="stDateInput"] label {
+        color: #FFFFFF !important;
+    }
+
+    /* Keep navigation buttons full-width and distinct from the narrower filters. */
+    section[data-testid="stSidebar"] .stButton > button {
+        width: 100% !important;
+        min-height: 38px !important;
+        height: 38px !important;
+        line-height: 1.1 !important;
     }
 
 </style>
@@ -870,8 +953,13 @@ def train_enhanced_prediction_models(_conn):
         return None, None, None, [], [], {'error': str(e)}
 
 # Sidebar Controls
-st.sidebar.title("ORD Flight Operations")
-st.sidebar.caption("Chicago O'Hare International Airport")
+st.sidebar.markdown(
+    '<div class="sidebar-header-fix">'
+    '<div class="sidebar-title">ORD Flight Operations</div>'
+    '<div class="sidebar-subtitle">Chicago O&#39;Hare International Airport</div>'
+    '</div>',
+    unsafe_allow_html=True
+)
 
 if "dashboard_page" not in st.session_state:
     st.session_state.dashboard_page = "Arrivals Intelligence"
@@ -879,8 +967,8 @@ if "dashboard_page" not in st.session_state:
 navigation_items = [
     ("Arrivals Intelligence", "🛬  Arrival Operations"),
     ("Departures Intelligence", "🛫  Departure Operations"),
-    ("🔮 Delay Predictor", "📈  Delay & Cancellation Predictor"),
-    ("Flight Deep-Dive", "🔎  Route Performance & Risk")
+    ("🔮 Delay Predictor", "📈  Risk Predictor"),
+    ("Flight Deep-Dive", "🔎  Route Performance")
 ]
 
 for page_key, page_label in navigation_items:
