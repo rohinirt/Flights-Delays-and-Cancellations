@@ -12,7 +12,7 @@ from sklearn.metrics import accuracy_score, f1_score
 
 # Page Configuration
 st.set_page_config(
-    page_title="Chicago O'Hare (ORD) Flight Intelligence",
+    page_title="ORD Flight Operations Intelligence",
     page_icon="✈️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -108,6 +108,17 @@ st.markdown("""
         box-shadow: 0 1px 3px rgba(15,23,42,0.05) !important;
     }
 
+    /* Chart containers: keep the white background, but remove the
+       visible card/frame around the chart itself. Filter-section containers
+       remain bordered because this selector requires a Plotly chart inside. */
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stPlotlyChart"]) {
+        background-color: #FFFFFF !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        padding: 4px 0 0 0 !important;
+    }
+
     /* Plotly canvas: no inner border. The surrounding white card remains. */
     div[data-testid="stPlotlyChart"],
     div[data-testid="stPlotlyChart"] > div,
@@ -152,8 +163,21 @@ st.markdown("""
     .badge-delay { background-color: #FEF2F2; color: #D00000; }
     .badge-normal { background-color: #F0FDF4; color: #10B981; }
 
-    section[data-testid="stSidebar"] { background-color: #0A192F !important; }
+    section[data-testid="stSidebar"] {
+        background-color: #0A192F !important;
+        padding-top: 0 !important;
+    }
+    section[data-testid="stSidebar"] > div:first-child,
+    section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+        padding-top: 0 !important;
+    }
     section[data-testid="stSidebar"] * { color: #ffffff !important; }
+
+    section[data-testid="stSidebar"] button {
+        border-radius: 8px !important;
+        margin-bottom: 4px !important;
+        text-align: left !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -217,12 +241,14 @@ def apply_white_chart_theme(fig):
         xaxis=dict(
             title=dict(text="", font=dict(color="#0f172a")),
             tickfont=dict(color="#0f172a"), gridcolor="#f1f5f9",
-            showline=False, mirror=False, zeroline=False, linecolor="rgba(0,0,0,0)"
+            showline=False, mirror=False, zeroline=False,
+            linecolor="rgba(0,0,0,0)", linewidth=0, ticks=""
         ),
         yaxis=dict(
             title=dict(text="", font=dict(color="#0f172a")),
             tickfont=dict(color="#0f172a"), gridcolor="#f1f5f9",
-            showline=False, mirror=False, zeroline=False, linecolor="rgba(0,0,0,0)"
+            showline=False, mirror=False, zeroline=False,
+            linecolor="rgba(0,0,0,0)", linewidth=0, ticks=""
         ),
         legend=dict(font=dict(color="#0f172a")),
         margin=dict(l=10, r=10, t=30, b=10)
@@ -242,7 +268,7 @@ def create_monthly_kpi_chart(data, x_col, y_col, bar_color="#0066CC"):
     month_map = {1:"Jan",2:"Feb",3:"Mar",4:"Apr",5:"May",6:"Jun",7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"}
     data["month_code"] = data[x_col].map(month_map)
     fig = px.bar(data, x="month_code", y=y_col)
-    fig.update_traces(marker_color="#0066CC", opacity=0.9, width=0.64, hovertemplate="%{x}: %{y:,.1f}<extra></extra>")
+    fig.update_traces(marker_color="#0066CC", opacity=0.9, width=0.51, hovertemplate="%{x}: %{y:,.1f}<extra></extra>")
     fig.update_layout(margin=dict(l=2,r=2,t=4,b=22), height=80, paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF",
         xaxis=dict(visible=True,type="category",categoryorder="array",categoryarray=list(month_map.values()),tickfont=dict(size=8,color="#475569"),showgrid=False,zeroline=False,fixedrange=True,title="",showline=False),
         yaxis=dict(visible=False,showgrid=False,fixedrange=True,autorange=True))
@@ -275,23 +301,23 @@ def create_3d_flight_map(_conn, mode="ARRIVALS", start_date=None, end_date=None)
 
         fig.add_trace(go.Scattergeo(
             locationmode='USA-states', lon=lons, lat=lats, mode='lines+markers',
-            line=dict(width=1.5, color='#38BDF8'), opacity=0.6, hoverinfo='text',
+            line=dict(width=1.7, color='#0066CC'), opacity=0.62, hoverinfo='text',
             text=text_lbl, showlegend=False
         ))
 
     fig.add_trace(go.Scattergeo(
         lon=[ord_lon], lat=[ord_lat], mode='markers+text',
-        marker=dict(size=10, color='#F87171', symbol='circle'), text=['ORD'],
+        marker=dict(size=11, color='#0066CC', symbol='circle'), text=['ORD'],
         textposition='top center', showlegend=False
     ))
 
     fig.update_layout(
         title=dict(text=title, font=dict(size=14, color="#0f172a")),
         geo=dict(
-            scope='north america', projection_type='orthographic',
-            showland=True, landcolor="#1E293B", showocean=True, oceancolor="#0F172A",
-            countrycolor="#475569", coastlinecolor="#475569", showlakes=True, lakecolor="#0F172A",
-            bgcolor="#FFFFFF", center=dict(lat=38.0, lon=-97.0), projection_scale=1.15
+            scope='north america', projection_type='natural earth',
+            showland=True, landcolor="#E2E8F0", showocean=True, oceancolor="#F8FAFC",
+            countrycolor="#CBD5E1", coastlinecolor="#94A3B8", showlakes=True, lakecolor="#DBEAFE",
+            bgcolor="#FFFFFF", center=dict(lat=38.0, lon=-97.0), projection_scale=1.05
         ),
         margin=dict(l=0, r=0, t=30, b=0), height=256, paper_bgcolor="#FFFFFF"
     )
@@ -579,10 +605,30 @@ def train_enhanced_prediction_models(_conn):
         return None, None, None, [], [], {'error': str(e)}
 
 # Sidebar Controls
-st.sidebar.title("✈️ ORD Analytics")
+st.sidebar.title("ORD Flight Intelligence")
 st.sidebar.caption("Chicago O'Hare International Airport")
 st.sidebar.markdown("---")
-page = st.sidebar.radio("Navigation", ["Arrivals Intelligence", "Departures Intelligence", "🔮 Delay Predictor", "Flight Deep-Dive"])
+
+if "dashboard_page" not in st.session_state:
+    st.session_state.dashboard_page = "Arrivals Intelligence"
+
+navigation_items = [
+    ("Arrivals Intelligence", "🛬  Arrival Operations"),
+    ("Departures Intelligence", "🛫  Departure Operations"),
+    ("🔮 Delay Predictor", "📈  Delay & Cancellation Predictor"),
+    ("Flight Deep-Dive", "🔎  Route Performance & Risk")
+]
+
+for page_key, page_label in navigation_items:
+    if st.sidebar.button(
+        page_label,
+        key=f"nav_{page_key}",
+        use_container_width=True,
+        type="primary" if st.session_state.dashboard_page == page_key else "secondary"
+    ):
+        st.session_state.dashboard_page = page_key
+
+page = st.session_state.dashboard_page
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Filter Data")
@@ -625,6 +671,17 @@ else:
 if (start_date, end_date) != (min_date, max_date):
     st.sidebar.caption(f"📅 {start_date} → {end_date}")
 
+flight_status = st.sidebar.selectbox(
+    "Flight Status",
+    ["All Flights", "On-Time / Early (≤15 min)", "Delayed (>15 min)", "Cancelled"],
+    help="Optional status filter for the operational dashboards."
+)
+
+st.sidebar.markdown(
+    "<div class='dashboard-footer'>Created by <b>Rohini Tembhurnikar</b></div>",
+    unsafe_allow_html=True
+)
+
 # Base SQL Filters
 where_arr = "WHERE UPPER(\"DEST\") = 'ORD' AND \"FL_DATE\" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)"
 where_dep = "WHERE UPPER(\"ORIGIN\") = 'ORD' AND \"FL_DATE\" BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)"
@@ -637,15 +694,25 @@ if selected_airline:
     params_arr.extend(selected_airline)
     params_dep.extend(selected_airline)
 
+if flight_status == "On-Time / Early (≤15 min)":
+    where_arr += ' AND "ARR_DELAY" <= 15'
+    where_dep += ' AND "DEP_DELAY" <= 15'
+elif flight_status == "Delayed (>15 min)":
+    where_arr += ' AND "ARR_DELAY" > 15'
+    where_dep += ' AND "DEP_DELAY" > 15'
+elif flight_status == "Cancelled":
+    where_arr += ' AND "CANCELLED" = 1'
+    where_dep += ' AND "CANCELLED" = 1'
+
 # ==================== ARRIVALS INTELLIGENCE PAGE ====================
 if page == "Arrivals Intelligence":
-    st.title("🛬 ORD Arrivals Intelligence")
+    st.title("Arrival Operations & Network Performance")
     st.caption("2022 Operational Performance & Inbound Route Analytics")
     
     kpi_df = run_query(conn, f"""
         SELECT COUNT(*) AS total_flights,
             AVG(CASE WHEN "ARR_DELAY" <= 15 THEN 1 ELSE 0 END) * 100 AS on_time_pct,
-            AVG("ARR_DELAY") AS avg_delay, SUM("CANCELLED") AS total_cancelled, SUM("DIVERTED") AS total_diverted
+            AVG(CASE WHEN "ARR_DELAY" > 0 THEN "ARR_DELAY" END) AS avg_delay, SUM("CANCELLED") AS total_cancelled, SUM("DIVERTED") AS total_diverted
         FROM flights {where_arr}
     """, params_arr)
     total_flights, on_time_pct, avg_delay, total_cancelled, total_diverted = kpi_df.iloc[0]
@@ -743,7 +810,7 @@ if page == "Arrivals Intelligence":
             pivot_heat = heat_df.pivot(index='row_dim', columns='hour', values='flights').fillna(0)
             fig_heat = go.Figure(data=go.Heatmap(z=pivot_heat.values, x=pivot_heat.columns, y=pivot_heat.index, colorscale="Blues", showscale=False, xgap=2, ygap=2, hovertemplate="Hour %{x}: %{z:,} flights<extra></extra>"))
             fig_heat = apply_white_chart_theme(fig_heat)
-            fig_heat.update_layout(height=280, margin=dict(l=10,r=10,t=10,b=10), xaxis=dict(title="Hour of Day (24h)",tickmode="linear",tick0=0,dtick=1,tickangle=0,automargin=True,showgrid=False,zeroline=False), yaxis=dict(title=y_label,showgrid=False,zeroline=False))
+            fig_heat.update_layout(height=280, margin=dict(l=10,r=10,t=10,b=10), xaxis=dict(title="",tickmode="linear",tick0=0,dtick=1,tickangle=0,automargin=True,showgrid=False,zeroline=False), yaxis=dict(title="",showgrid=False,zeroline=False))
             st.plotly_chart(fig_heat, width='stretch')
 
     with c_delay:
@@ -780,13 +847,13 @@ if page == "Arrivals Intelligence":
 
 # ==================== DEPARTURES INTELLIGENCE PAGE ====================
 elif page == "Departures Intelligence":
-    st.title("🛫 ORD Departures Intelligence")
+    st.title("Departure Operations & Network Performance")
     st.caption("2022 Operational Performance & Outbound Route Analytics")
 
     kpi_df = run_query(conn, f"""
         SELECT COUNT(*) AS total_flights,
             AVG(CASE WHEN "DEP_DELAY" <= 15 THEN 1 ELSE 0 END) * 100 AS on_time_pct,
-            AVG("DEP_DELAY") AS avg_delay, SUM("CANCELLED") AS total_cancelled, SUM("DIVERTED") AS total_diverted
+            AVG(CASE WHEN "DEP_DELAY" > 0 THEN "DEP_DELAY" END) AS avg_delay, SUM("CANCELLED") AS total_cancelled, SUM("DIVERTED") AS total_diverted
         FROM flights {where_dep}
     """, params_dep)
     total_flights, on_time_pct, avg_delay, total_cancelled, total_diverted = kpi_df.iloc[0]
@@ -921,8 +988,8 @@ elif page == "Departures Intelligence":
 
 # ==================== DELAY PREDICTOR PAGE ====================
 elif page == "🔮 Delay Predictor":
-    st.title("🔮 Enhanced Machine Learning Intelligence")
-    st.caption("Multi-tiered Delay Severity & Cancellation Risk Prediction Models.")
+    st.title("Flight Delay & Cancellation Risk Predictor")
+    st.caption("Predictive risk assessment for delay severity and flight cancellation using operational flight characteristics.")
 
     severity_model, cancel_model, encoder, origins_list, dests_list, model_metrics = train_enhanced_prediction_models(conn)
 
@@ -935,11 +1002,13 @@ elif page == "🔮 Delay Predictor":
         if model_metrics:
             with st.container(border=True):
                 st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 8px;'>📐 Model Validation (held out 20% of the data, never seen during training)</div>", unsafe_allow_html=True)
+                st.markdown('<div class="kpi-center">', unsafe_allow_html=True)
                 mv1, mv2, mv3, mv4 = st.columns(4)
                 mv1.metric("Severity Accuracy", f"{model_metrics['severity_accuracy']*100:.1f}%")
                 mv2.metric("Severity F1 (macro)", f"{model_metrics['severity_f1']:.2f}")
                 mv3.metric("Cancellation Accuracy", f"{model_metrics['cancel_accuracy']*100:.1f}%")
                 mv4.metric("Cancellation F1", f"{model_metrics['cancel_f1']:.2f}")
+                st.markdown('</div>', unsafe_allow_html=True)
                 st.caption(
                     f"Trained on {model_metrics['n_train']:,} flights, validated on {model_metrics['n_test']:,} held-out flights. "
                     f"Only {model_metrics['cancel_base_rate']*100:.1f}% of flights in this dataset were cancelled, so cancellation "
@@ -951,19 +1020,109 @@ elif page == "🔮 Delay Predictor":
             st.markdown("<div style='font-weight: 700; color: #0F172A; margin-bottom: 12px;'>✈️ Configure Flight Parameters</div>", unsafe_allow_html=True)
             p1, p2, p3 = st.columns(3)
             
-            airline_opts = airlines if airlines else list(AIRLINE_NAMES.keys())
-            orig_opts = origins_list if origins_list else ['ORD', 'LAX', 'JFK', 'DFW']
-            dest_opts = dests_list if dests_list else ['ORD', 'LAX', 'JFK', 'DFW']
+            # The dashboard data is ORD-scoped. Use only route combinations
+            # that actually exist in that filtered dataset.
+            prediction_mode = st.selectbox(
+                "Flight Direction",
+                ["ARRIVALS", "DEPARTURES"],
+                format_func=lambda x:
+                    "Arrivals to ORD" if x == "ARRIVALS" else "Departures from ORD"
+            )
 
-            with p1:
-                input_airline = st.selectbox("Select Airline", options=airline_opts, format_func=lambda x: f"{x} - {AIRLINE_NAMES.get(str(x), 'Carrier')}", help="The operating carrier code, e.g. AA for American Airlines")
-                input_month = st.slider("Flight Month", 1, 12, 6, help="Delay patterns shift seasonally - winter months tend to run higher weather-delay risk")
+            if prediction_mode == "ARRIVALS":
+                valid_route_df = run_query(
+                    conn,
+                    f'''SELECT DISTINCT "ORIGIN" AS route_airport
+                        FROM flights {where_arr}
+                        AND "ORIGIN" IS NOT NULL
+                        AND UPPER("DEST") = 'ORD'
+                        ORDER BY route_airport''',
+                    params_arr
+                )
+            else:
+                valid_route_df = run_query(
+                    conn,
+                    f'''SELECT DISTINCT "DEST" AS route_airport
+                        FROM flights {where_dep}
+                        AND "DEST" IS NOT NULL
+                        AND UPPER("ORIGIN") = 'ORD'
+                        ORDER BY route_airport''',
+                    params_dep
+                )
+
+            valid_airports = valid_route_df["route_airport"].astype(str).tolist()
+            if not valid_airports:
+                st.warning("No valid ORD routes are available under the current sidebar filters.")
+                st.stop()
+
+            p1, p2, p3 = st.columns(3)
+
+            if prediction_mode == "ARRIVALS":
+                with p1:
+                    input_origin = st.selectbox(
+                        "Origin Airport",
+                        valid_airports,
+                        format_func=lambda x:
+                            f"{x} — {AIRPORT_CITY_NAMES.get(x, x)}"
+                    )
+                input_dest = "ORD"
+            else:
+                input_origin = "ORD"
+                with p1:
+                    input_dest = st.selectbox(
+                        "Destination Airport",
+                        valid_airports,
+                        format_func=lambda x:
+                            f"{x} — {AIRPORT_CITY_NAMES.get(x, x)}"
+                    )
+
+            if prediction_mode == "ARRIVALS":
+                pred_route_sql = f'''{where_arr}
+                    AND UPPER("ORIGIN") = ?
+                    AND UPPER("DEST") = 'ORD' '''
+                pred_route_params = list(params_arr) + [input_origin.upper()]
+            else:
+                pred_route_sql = f'''{where_dep}
+                    AND UPPER("ORIGIN") = 'ORD'
+                    AND UPPER("DEST") = ? '''
+                pred_route_params = list(params_dep) + [input_dest.upper()]
+
+            pred_airline_df = run_query(
+                conn,
+                f'''SELECT DISTINCT "{airline_col_name}" AS airline
+                    FROM flights {pred_route_sql}
+                    AND "{airline_col_name}" IS NOT NULL
+                    ORDER BY airline''',
+                pred_route_params
+            )
+            pred_airlines = pred_airline_df["airline"].astype(str).tolist()
+
+            if not pred_airlines:
+                st.warning("No airlines operate the selected route under the current filters.")
+                st.stop()
+
             with p2:
-                input_origin = st.selectbox("Origin Airport", options=orig_opts, index=orig_opts.index('ORD') if 'ORD' in orig_opts else 0, help="Departure airport for this flight")
-                input_hour = st.slider("Scheduled Departure Hour (24h)", 0, 23, 14, help="24-hour scheduled departure time - delays tend to compound later in the day")
+                input_airline = st.selectbox(
+                    "Airline",
+                    pred_airlines,
+                    format_func=lambda x:
+                        f"{x} — {AIRLINE_NAMES.get(str(x), 'Carrier')}"
+                )
+                input_month = st.slider(
+                    "Flight Month", 1, 12, 6,
+                    help="Seasonality is included as a model feature."
+                )
+
             with p3:
-                input_dest = st.selectbox("Destination Airport", options=dest_opts, index=dest_opts.index('LAX') if 'LAX' in dest_opts else 0, help="Arrival airport for this flight")
-                input_dist = st.number_input("Route Distance (miles)", min_value=100, max_value=5000, value=800, step=50, help="Great-circle distance for the route; longer flights have more time to recover from a delayed departure")
+                input_hour = st.slider(
+                    "Scheduled Departure Hour (24h)", 0, 23, 14,
+                    help="Scheduled departure time used by the prediction model."
+                )
+                input_dist = st.number_input(
+                    "Route Distance (miles)",
+                    min_value=100, max_value=5000, value=800, step=50,
+                    help="Route distance used by the prediction model."
+                )
 
             run_predict = st.button("Run Predictive Risk Analysis", type="primary", width='stretch')
 
@@ -986,6 +1145,7 @@ elif page == "🔮 Delay Predictor":
                 st.markdown("---")
                 
                 # Risk Gauges
+                st.markdown('<div class="kpi-center">', unsafe_allow_html=True)
                 m1, m2, m3 = st.columns(3)
                 with m1:
                     with st.container(border=True):
@@ -1015,6 +1175,8 @@ elif page == "🔮 Delay Predictor":
                         else:
                             st.markdown("<span style='color:#10B981; font-weight:800; font-size:1.1rem;'>On-Time / Minor Delay</span>", unsafe_allow_html=True)
 
+                st.markdown('</div>', unsafe_allow_html=True)
+
                 # Severity Breakdown Chart
                 with st.container(border=True):
                     st.markdown("##### 📊 Delay Severity Tier Distribution")
@@ -1034,7 +1196,7 @@ elif page == "🔮 Delay Predictor":
 
 # ==================== FLIGHT DEEP-DIVE PAGE ====================
 elif page == "Flight Deep-Dive":
-    st.title("🔎 Route & Flight Intelligence")
+    st.title("Route Performance & Risk Intelligence")
     st.caption("Route-level operational intelligence, reliability patterns, delay drivers, traffic patterns, and advanced risk analytics.")
 
     # The dashboard dataset is intentionally scoped to ORD arrivals and ORD
@@ -1197,6 +1359,7 @@ elif page == "Flight Deep-Dive":
         avg = route_df.ARR_DELAY_NUM.mean()
         p90 = route_df.ARR_DELAY_NUM.quantile(.9)
         cancel = route_df.CANCELLED_NUM.mean() * 100
+        st.markdown('<div class="kpi-center">', unsafe_allow_html=True)
         k1,k2,k3,k4,k5,k6 = st.columns(6)
         k1.metric("Route Flights", f"{total:,}")
         k2.metric("On-Time Arrival", f"{ota:.1f}%")
@@ -1204,11 +1367,12 @@ elif page == "Flight Deep-Dive":
         k4.metric("Avg Arrival Delay", f"{avg:.1f} min")
         k5.metric("P90 Arrival Delay", f"{p90:.1f} min")
         k6.metric("Cancellation Rate", f"{cancel:.1f}%")
+        st.markdown('</div>', unsafe_allow_html=True)
 
         a,b = st.columns([1.15,1])
         with a:
             with st.container(border=True):
-                st.markdown("### 📊 Delay Distribution")
+                st.markdown("### Delay Distribution")
                 fig = go.Figure(go.Histogram(x=route_df.ARR_DELAY_NUM, nbinsx=30, marker_color="#0066CC", opacity=.85))
                 fig.add_vline(x=15, line_dash="dash", line_color="#D97706", annotation_text="15 min")
                 fig.add_vline(x=float(route_df.ARR_DELAY_NUM.median()), line_dash="dot", line_color="#0F172A")
@@ -1217,7 +1381,7 @@ elif page == "Flight Deep-Dive":
                 st.plotly_chart(fig, width='stretch')
         with b:
             with st.container(border=True):
-                st.markdown("### ⏰ Departure-Time Risk Curve")
+                st.markdown("### Departure-Time Risk Curve")
                 h = route_df.groupby("DEP_HOUR").agg(Flights=("DEP_HOUR","size"), AvgDelay=("ARR_DELAY_NUM","mean")).reset_index()
                 fig = go.Figure([
                     go.Bar(x=h.DEP_HOUR,y=h.Flights,name="Flights",marker_color="#CBD5E1",yaxis="y"),
@@ -1230,7 +1394,7 @@ elif page == "Flight Deep-Dive":
         a,b = st.columns([1.15,1])
         with a:
             with st.container(border=True):
-                st.markdown("### 📈 Monthly Reliability")
+                st.markdown("### Monthly Reliability")
                 m = route_df.dropna(subset=["FL_DATE"]).groupby(route_df["FL_DATE"].dt.to_period("M")).agg(Flights=("FL_DATE","size"),OnTime=("ARR_DELAY_NUM",lambda x:(x<=15).mean()*100),AvgDelay=("ARR_DELAY_NUM","mean")).reset_index()
                 m["Month"] = m.FL_DATE.astype(str)
                 fig = go.Figure([
@@ -1240,7 +1404,7 @@ elif page == "Flight Deep-Dive":
                 fig = apply_white_chart_theme(fig); fig.update_layout(height=290,margin=dict(l=10,r=10,t=10,b=10),yaxis_title="Rate / Minutes",legend=dict(orientation="h",y=1.08,x=0)); st.plotly_chart(fig,width='stretch')
         with b:
             with st.container(border=True):
-                st.markdown("### 🏷️ Carrier Reliability")
+                st.markdown("### Carrier Reliability")
                 cs = route_df.groupby(airline_col).agg(Flights=(airline_col,"size"),OnTime=("ARR_DELAY_NUM",lambda x:(x<=15).mean()*100),AvgDelay=("ARR_DELAY_NUM","mean"),P90Delay=("ARR_DELAY_NUM",lambda x:x.quantile(.9))).reset_index()
                 cs["Carrier"] = cs[airline_col].astype(str).map(lambda x:AIRLINE_NAMES.get(x,x))
                 fig = px.bar(cs.sort_values("OnTime"),x="OnTime",y="Carrier",orientation="h",text="OnTime")
@@ -1250,7 +1414,7 @@ elif page == "Flight Deep-Dive":
         a,b = st.columns([1,1.15])
         with a:
             with st.container(border=True):
-                st.markdown("### 🩺 Delay Cause Mix")
+                st.markdown("### Delay Cause Mix")
                 cmap={"DELAY_DUE_CARRIER":"Carrier","DELAY_DUE_WEATHER":"Weather","DELAY_DUE_NAS":"NAS","DELAY_DUE_SECURITY":"Security","DELAY_DUE_LATE_AIRCRAFT":"Late Aircraft"}
                 cols=[c for c in cmap if c in route_df]
                 if cols:
@@ -1259,7 +1423,7 @@ elif page == "Flight Deep-Dive":
                 else: st.info("Delay-cause fields are not available for this route.")
         with b:
             with st.container(border=True):
-                st.markdown("### 🔬 Delay vs. Distance")
+                st.markdown("### Delay vs. Distance")
                 scatter_df=route_df[["DISTANCE_NUM","ARR_DELAY_NUM"]].replace([np.inf,-np.inf],np.nan).dropna()
                 fig=go.Figure(); fig.add_trace(go.Scatter(x=scatter_df["DISTANCE_NUM"],y=scatter_df["ARR_DELAY_NUM"],mode="markers",name="Flights",marker=dict(size=6,color="#0066CC",opacity=.55),hovertemplate="Distance: %{x:,.0f} mi<br>Arrival delay: %{y:.1f} min<extra></extra>"))
                 if len(scatter_df)>=10 and scatter_df["DISTANCE_NUM"].nunique()>1:
@@ -1268,24 +1432,22 @@ elif page == "Flight Deep-Dive":
                 fig=apply_white_chart_theme(fig); fig.update_layout(height=300,margin=dict(l=10,r=10,t=10,b=10),xaxis_title="Distance (miles)",yaxis_title="Arrival Delay (minutes)",legend=dict(orientation="h",y=1.08,x=0)); st.plotly_chart(fig,width='stretch')
 
         with st.container(border=True):
-            st.markdown("### 🧠 Advanced Route Risk Analytics")
+            st.markdown("### Advanced Route Risk Analytics")
             r1,r2,r3=st.columns(3)
             with r1:
+                st.markdown("<div style='font-weight:700;color:#0F172A;font-size:.88rem;margin-bottom:3px;'>Hourly Smoothed Delay Risk</div>", unsafe_allow_html=True)
                 rh=route_df.groupby("DEP_HOUR").agg(Flights=("DEP_HOUR","size"),DelayRate=("ARR_DELAY_NUM",lambda x:(x>15).mean()*100)).reset_index(); prior=max(20,int(total*.1)); base=(route_df.ARR_DELAY_NUM>15).mean()*100; rh["SmoothedRisk"]=(rh.Flights*rh.DelayRate+prior*base)/(rh.Flights+prior)
                 fig=px.bar(rh.sort_values("SmoothedRisk"),x="SmoothedRisk",y="DEP_HOUR",orientation="h",text="SmoothedRisk"); fig.update_traces(marker_color="#0066CC",texttemplate="%{text:.1f}%",textposition="outside",width=.64); fig=apply_white_chart_theme(fig); fig.update_layout(height=280,margin=dict(l=10,r=35,t=10,b=10),xaxis_title="Smoothed Delay Risk %",yaxis_title="Hour"); st.plotly_chart(fig,width='stretch')
             with r2:
+                st.markdown("<div style='font-weight:700;color:#0F172A;font-size:.88rem;margin-bottom:3px;'>Carrier Reliability Confidence</div>", unsafe_allow_html=True)
                 ci=cs.copy(); z=1.96; ci["p"]=ci.OnTime/100; ci["se"]=np.sqrt((ci.p*(1-ci.p))/ci.Flights.clip(lower=1)); ci["Lower"]=(ci.p-z*ci.se).clip(lower=0)*100; ci["Upper"]=(ci.p+z*ci.se).clip(upper=1)*100; fig=go.Figure()
                 for _,row in ci.sort_values("OnTime").iterrows():
                     fig.add_trace(go.Scatter(x=[row.Lower,row.Upper],y=[row.Carrier,row.Carrier],mode="lines",line=dict(color="#94A3B8",width=6),showlegend=False)); fig.add_trace(go.Scatter(x=[row.OnTime],y=[row.Carrier],mode="markers",marker=dict(color="#0066CC",size=9),showlegend=False,hovertemplate=f"{row.Carrier}<br>On-time: {row.OnTime:.1f}%<br>Approx. 95% interval: {row.Lower:.1f}%–{row.Upper:.1f}%<extra></extra>"))
                 fig=apply_white_chart_theme(fig); fig.update_layout(height=280,margin=dict(l=10,r=10,t=10,b=10),xaxis_title="On-Time Arrival %",yaxis_title=""); st.plotly_chart(fig,width='stretch')
             with r3:
+                st.markdown("<div style='font-weight:700;color:#0F172A;font-size:.88rem;margin-bottom:3px;'>Cumulative Delay Concentration</div>", unsafe_allow_html=True)
                 pdly=route_df.loc[route_df.ARR_DELAY_NUM>0,"ARR_DELAY_NUM"].sort_values(ascending=False).reset_index(drop=True)
                 if len(pdly):
                     cum=pdly.cumsum()/pdly.sum()*100; pdf=pd.DataFrame({"Rank":np.arange(1,len(cum)+1),"Cumulative":cum}); fig=px.line(pdf,x="Rank",y="Cumulative"); fig.add_hline(y=80,line_dash="dash",line_color="#D97706",annotation_text="80%"); fig=apply_white_chart_theme(fig); fig.update_traces(line_color="#0066CC",line_width=3); fig.update_layout(height=280,margin=dict(l=10,r=10,t=10,b=10),xaxis_title="Positive-delay flights ranked by severity",yaxis_title="Cumulative delay share (%)"); st.plotly_chart(fig,width='stretch')
                 else: st.info("No positive arrival delays in the selected route/date range.")
-
-        with st.container(border=True):
-            st.markdown("### 📋 Route Flight Records")
-            cols=[c for c in ["FL_DATE",airline_col,"FL_NUMBER","ORIGIN","DEST","DEP_DELAY","ARR_DELAY","CANCELLED","DISTANCE"] if c in route_df]
-            st.dataframe(route_df[cols].sort_values("FL_DATE",ascending=False).head(100),width='stretch',height=320)
 
