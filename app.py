@@ -204,14 +204,14 @@ st.markdown("""
     section[data-testid="stSidebar"] {
         background-color: #0A192F !important;
         padding-top: 0 !important;
-        width: 270px !important;
-        min-width: 270px !important;
-        max-width: 270px !important;
+        width: 243px !important;
+        min-width: 243px !important;
+        max-width: 243px !important;
     }
     section[data-testid="stSidebar"] > div:first-child,
     section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
         padding-top: 0 !important;
-        width: 270px !important;
+        width: 243px !important;
     }
     section[data-testid="stSidebar"] h1 {
         margin-top: 0 !important;
@@ -241,6 +241,149 @@ st.markdown("""
         color: #FFFFFF !important;
         border-color: #0066CC !important;
     }
+
+    /* FINAL UI POLISH */
+    .block-container {
+        padding-top: 1.05rem !important;
+    }
+    .main h1, [data-testid="stAppViewContainer"] h1 {
+        font-size: 1.55rem !important;
+        line-height: 1.18 !important;
+        margin-top: 0 !important;
+        margin-bottom: 0.35rem !important;
+        padding-top: 0 !important;
+    }
+    .main h2, [data-testid="stAppViewContainer"] h2 {
+        font-size: 0.92rem !important;
+        line-height: 1.2 !important;
+        margin-top: 0.15rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+    .main h3, [data-testid="stAppViewContainer"] h3 {
+        font-size: 0.78rem !important;
+        line-height: 1.2 !important;
+        margin-top: 0.1rem !important;
+        margin-bottom: 0.15rem !important;
+    }
+
+    section[data-testid="stSidebar"] h1 {
+        font-size: 1.18rem !important;
+        line-height: 1.15 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
+        margin-top: 0 !important;
+        margin-bottom: 0.15rem !important;
+    }
+    section[data-testid="stSidebar"] .stButton {
+        margin-top: 0 !important;
+        margin-bottom: 1px !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button,
+    section[data-testid="stSidebar"] button[kind="secondary"],
+    section[data-testid="stSidebar"] button[kind="primary"] {
+        min-height: 36px !important;
+        height: 36px !important;
+        padding: 0.15rem 0.55rem !important;
+        margin: 0 !important;
+        border-radius: 7px !important;
+        font-size: 0.78rem !important;
+        line-height: 1 !important;
+        text-align: left !important;
+    }
+
+    /* Fix invisible navigation labels. */
+    section[data-testid="stSidebar"] button[kind="secondary"] {
+        background-color: #0F2747 !important;
+        color: #FFFFFF !important;
+        border: 1px solid rgba(255,255,255,0.16) !important;
+    }
+    section[data-testid="stSidebar"] button[kind="secondary"] p,
+    section[data-testid="stSidebar"] button[kind="secondary"] span {
+        color: #FFFFFF !important;
+    }
+    section[data-testid="stSidebar"] button[kind="primary"] {
+        background-color: #0066CC !important;
+        color: #FFFFFF !important;
+        border: 1px solid #0066CC !important;
+    }
+    section[data-testid="stSidebar"] button[kind="primary"] p,
+    section[data-testid="stSidebar"] button[kind="primary"] span {
+        color: #FFFFFF !important;
+    }
+
+    section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        gap: 0.12rem !important;
+    }
+    section[data-testid="stSidebar"] hr {
+        margin: 0.2rem 0 !important;
+    }
+
+    /* Filter controls + selected values. */
+    section[data-testid="stSidebar"] [data-baseweb="select"] > div {
+        background-color: #F8FAFC !important;
+        border: 1px solid #CBD5E1 !important;
+        min-height: 36px !important;
+        border-radius: 7px !important;
+    }
+    section[data-testid="stSidebar"] [data-baseweb="select"] span,
+    section[data-testid="stSidebar"] [data-baseweb="select"] input {
+        color: #0F172A !important;
+    }
+    section[data-testid="stSidebar"] [data-baseweb="tag"] {
+        background-color: #E2E8F0 !important;
+        color: #0F172A !important;
+        border: 1px solid #CBD5E1 !important;
+    }
+    section[data-testid="stSidebar"] [data-baseweb="tag"] span {
+        color: #0F172A !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stDateInput"] input {
+        background-color: #F8FAFC !important;
+        color: #0F172A !important;
+        border: 1px solid #CBD5E1 !important;
+        border-radius: 7px !important;
+        min-height: 36px !important;
+    }
+
+    /* When collapsed, do not retain a forced sidebar gutter. */
+    section[data-testid="stSidebar"][aria-expanded="false"] {
+        width: 0 !important;
+        min-width: 0 !important;
+        max-width: 0 !important;
+    }
+    section[data-testid="stSidebar"][aria-expanded="false"] > div:first-child {
+        width: 0 !important;
+    }
+
+    /* Compact chart cards and Plotly canvas whitespace. */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        padding: 4px 7px !important;
+        margin-bottom: 4px !important;
+        border-radius: 7px !important;
+    }
+    div[data-testid="stPlotlyChart"],
+    div[data-testid="stPlotlyChart"] > div {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .deep-dive-chart-title {
+        font-size: 0.72rem !important;
+        font-weight: 700 !important;
+        line-height: 1.15 !important;
+        margin: 0 0 1px 0 !important;
+        padding: 0 !important;
+        color: #0F172A !important;
+    }
+    .advanced-risk-title {
+        font-size: 0.9rem !important;
+        line-height: 1.15 !important;
+        margin: 0 0 2px 0 !important;
+        padding: 0 !important;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -668,7 +811,7 @@ def train_enhanced_prediction_models(_conn):
         return None, None, None, [], [], {'error': str(e)}
 
 # Sidebar Controls
-st.sidebar.title("ORD Flight Operations Dashboard")
+st.sidebar.title("ORD Flight Operations")
 st.sidebar.caption("Chicago O'Hare International Airport")
 
 if "dashboard_page" not in st.session_state:
@@ -693,7 +836,7 @@ for page_key, page_label in navigation_items:
 page = st.session_state.dashboard_page
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("Filter Data")
+st.sidebar.subheader("Filters")
 
 try:
     cols_df = conn.execute("DESCRIBE flights").df()
@@ -1440,82 +1583,82 @@ elif page == "Flight Deep-Dive":
         a,b = st.columns([1.15,1])
         with a:
             with st.container(border=True):
-                st.markdown("### Delay Distribution")
+                st.markdown('<div class="deep-dive-chart-title">Delay Distribution</div>', unsafe_allow_html=True)
                 fig = go.Figure(go.Histogram(x=route_df.ARR_DELAY_NUM, nbinsx=30, marker_color="#0066CC", opacity=.85))
                 fig.add_vline(x=15, line_dash="dash", line_color="#D97706", annotation_text="15 min")
                 fig.add_vline(x=float(route_df.ARR_DELAY_NUM.median()), line_dash="dot", line_color="#0F172A")
                 fig = apply_white_chart_theme(fig)
-                fig.update_layout(height=240, margin=dict(l=6,r=6,t=4,b=6), xaxis_title="Arrival Delay (minutes)", yaxis_title="Flights")
+                fig.update_layout(height=190, margin=dict(l=4,r=4,t=2,b=4), xaxis_title="Arrival Delay (minutes)", yaxis_title="Flights")
                 st.plotly_chart(fig, width='stretch')
         with b:
             with st.container(border=True):
-                st.markdown("### Departure-Time Risk Curve")
+                st.markdown('<div class="deep-dive-chart-title">Departure-Time Risk Curve</div>', unsafe_allow_html=True)
                 h = route_df.groupby("DEP_HOUR").agg(Flights=("DEP_HOUR","size"), AvgDelay=("ARR_DELAY_NUM","mean")).reset_index()
                 fig = go.Figure([
                     go.Bar(x=h.DEP_HOUR,y=h.Flights,name="Flights",marker_color="#CBD5E1",yaxis="y"),
                     go.Scatter(x=h.DEP_HOUR,y=h.AvgDelay,name="Avg arrival delay",mode="lines+markers",line=dict(color="#0066CC",width=3),yaxis="y2")
                 ])
                 fig = apply_white_chart_theme(fig)
-                fig.update_layout(height=240,margin=dict(l=6,r=6,t=4,b=6),xaxis=dict(title="Scheduled Departure Hour",dtick=1,showline=False),yaxis=dict(title="Flights",showline=False),yaxis2=dict(title="Avg Delay (min)",overlaying="y",side="right",showgrid=False,showline=False),legend=dict(orientation="h",y=1.08,x=0))
+                fig.update_layout(height=190,margin=dict(l=4,r=4,t=2,b=4),xaxis=dict(title="Scheduled Departure Hour",dtick=1,showline=False),yaxis=dict(title="Flights",showline=False),yaxis2=dict(title="Avg Delay (min)",overlaying="y",side="right",showgrid=False,showline=False),legend=dict(orientation="h",y=1.08,x=0))
                 st.plotly_chart(fig,width='stretch')
 
         a,b = st.columns([1.15,1])
         with a:
             with st.container(border=True):
-                st.markdown("### Monthly Reliability")
+                st.markdown('<div class="deep-dive-chart-title">Monthly Reliability</div>', unsafe_allow_html=True)
                 m = route_df.dropna(subset=["FL_DATE"]).groupby(route_df["FL_DATE"].dt.to_period("M")).agg(Flights=("FL_DATE","size"),OnTime=("ARR_DELAY_NUM",lambda x:(x<=15).mean()*100),AvgDelay=("ARR_DELAY_NUM","mean")).reset_index()
                 m["Month"] = m.FL_DATE.astype(str)
                 fig = go.Figure([
                     go.Scatter(x=m.Month,y=m.OnTime,name="On-Time %",mode="lines+markers",line=dict(color="#0066CC",width=3)),
                     go.Scatter(x=m.Month,y=m.AvgDelay,name="Avg Delay",mode="lines+markers",line=dict(color="#64748B",width=2,dash="dot"))
                 ])
-                fig = apply_white_chart_theme(fig); fig.update_layout(height=240,margin=dict(l=6,r=6,t=4,b=6),yaxis_title="Rate / Minutes",legend=dict(orientation="h",y=1.08,x=0)); st.plotly_chart(fig,width='stretch')
+                fig = apply_white_chart_theme(fig); fig.update_layout(height=190,margin=dict(l=4,r=4,t=2,b=4),yaxis_title="Rate / Minutes",legend=dict(orientation="h",y=1.08,x=0)); st.plotly_chart(fig,width='stretch')
         with b:
             with st.container(border=True):
-                st.markdown("### Carrier Reliability")
+                st.markdown('<div class="deep-dive-chart-title">Carrier Reliability</div>', unsafe_allow_html=True)
                 cs = route_df.groupby(airline_col).agg(Flights=(airline_col,"size"),OnTime=("ARR_DELAY_NUM",lambda x:(x<=15).mean()*100),AvgDelay=("ARR_DELAY_NUM","mean"),P90Delay=("ARR_DELAY_NUM",lambda x:x.quantile(.9))).reset_index()
                 cs["Carrier"] = cs[airline_col].astype(str).map(lambda x:AIRLINE_NAMES.get(x,x))
                 fig = px.bar(cs.sort_values("OnTime"),x="OnTime",y="Carrier",orientation="h",text="OnTime")
                 fig.update_traces(marker_color="#0066CC",texttemplate="%{text:.1f}%",textposition="outside",width=.64)
-                fig = apply_white_chart_theme(fig); fig.update_layout(height=240,margin=dict(l=6,r=18,t=4,b=6),xaxis_title="On-Time Arrival %",yaxis_title=""); st.plotly_chart(fig,width='stretch')
+                fig = apply_white_chart_theme(fig); fig.update_layout(height=190,margin=dict(l=4,r=8,t=2,b=4),xaxis_title="On-Time Arrival %",yaxis_title=""); st.plotly_chart(fig,width='stretch')
 
         a,b = st.columns([1,1.15])
         with a:
             with st.container(border=True):
-                st.markdown("### Delay Cause Mix")
+                st.markdown('<div class="deep-dive-chart-title">Delay Cause Mix</div>', unsafe_allow_html=True)
                 cmap={"DELAY_DUE_CARRIER":"Carrier","DELAY_DUE_WEATHER":"Weather","DELAY_DUE_NAS":"NAS","DELAY_DUE_SECURITY":"Security","DELAY_DUE_LATE_AIRCRAFT":"Late Aircraft"}
                 cols=[c for c in cmap if c in route_df]
                 if cols:
                     cd=pd.DataFrame({"Cause":[cmap[c] for c in cols],"Minutes":[pd.to_numeric(route_df[c],errors="coerce").fillna(0).sum() for c in cols]})
-                    fig=px.bar(cd.sort_values("Minutes"),x="Minutes",y="Cause",orientation="h",text_auto=".0f"); fig.update_traces(marker_color="#0066CC",width=.64); fig=apply_white_chart_theme(fig); fig.update_layout(height=240,margin=dict(l=6,r=14,t=4,b=6),xaxis_title="Total Delay Minutes",yaxis_title=""); st.plotly_chart(fig,width='stretch')
+                    fig=px.bar(cd.sort_values("Minutes"),x="Minutes",y="Cause",orientation="h",text_auto=".0f"); fig.update_traces(marker_color="#0066CC",width=.64); fig=apply_white_chart_theme(fig); fig.update_layout(height=190,margin=dict(l=4,r=8,t=2,b=4),xaxis_title="Total Delay Minutes",yaxis_title=""); st.plotly_chart(fig,width='stretch')
                 else: st.info("Delay-cause fields are not available for this route.")
         with b:
             with st.container(border=True):
-                st.markdown("### Delay vs. Distance")
+                st.markdown('<div class="deep-dive-chart-title">Delay vs. Distance</div>', unsafe_allow_html=True)
                 scatter_df=route_df[["DISTANCE_NUM","ARR_DELAY_NUM"]].replace([np.inf,-np.inf],np.nan).dropna()
                 fig=go.Figure(); fig.add_trace(go.Scatter(x=scatter_df["DISTANCE_NUM"],y=scatter_df["ARR_DELAY_NUM"],mode="markers",name="Flights",marker=dict(size=6,color="#0066CC",opacity=.55),hovertemplate="Distance: %{x:,.0f} mi<br>Arrival delay: %{y:.1f} min<extra></extra>"))
                 if len(scatter_df)>=10 and scatter_df["DISTANCE_NUM"].nunique()>1:
                     x=scatter_df["DISTANCE_NUM"].to_numpy(dtype=float); y=scatter_df["ARR_DELAY_NUM"].to_numpy(dtype=float); slope,intercept=np.polyfit(x,y,1); xline=np.linspace(x.min(),x.max(),100)
                     fig.add_trace(go.Scatter(x=xline,y=slope*xline+intercept,mode="lines",name="Linear trend",line=dict(color="#0F172A",width=2,dash="dash"),hoverinfo="skip"))
-                fig=apply_white_chart_theme(fig); fig.update_layout(height=240,margin=dict(l=6,r=6,t=4,b=6),xaxis_title="Distance (miles)",yaxis_title="Arrival Delay (minutes)",legend=dict(orientation="h",y=1.08,x=0)); st.plotly_chart(fig,width='stretch')
+                fig=apply_white_chart_theme(fig); fig.update_layout(height=190,margin=dict(l=4,r=4,t=2,b=4),xaxis_title="Distance (miles)",yaxis_title="Arrival Delay (minutes)",legend=dict(orientation="h",y=1.08,x=0)); st.plotly_chart(fig,width='stretch')
 
         with st.container(border=True):
-            st.markdown("### Advanced Route Risk Analytics")
+            st.markdown('<div class="advanced-risk-title">Advanced Route Risk Analytics</div>', unsafe_allow_html=True)
             r1,r2,r3=st.columns(3)
             with r1:
-                st.markdown("<div style='font-weight:700;color:#0F172A;font-size:.88rem;margin-bottom:3px;'>Hourly Smoothed Delay Risk</div>", unsafe_allow_html=True)
+                st.markdown('<div class="deep-dive-chart-title">Hourly Smoothed Delay Risk</div>', unsafe_allow_html=True)
                 rh=route_df.groupby("DEP_HOUR").agg(Flights=("DEP_HOUR","size"),DelayRate=("ARR_DELAY_NUM",lambda x:(x>15).mean()*100)).reset_index(); prior=max(20,int(total*.1)); base=(route_df.ARR_DELAY_NUM>15).mean()*100; rh["SmoothedRisk"]=(rh.Flights*rh.DelayRate+prior*base)/(rh.Flights+prior)
-                fig=px.bar(rh.sort_values("SmoothedRisk"),x="SmoothedRisk",y="DEP_HOUR",orientation="h",text="SmoothedRisk"); fig.update_traces(marker_color="#0066CC",texttemplate="%{text:.1f}%",textposition="outside",width=.64); fig=apply_white_chart_theme(fig); fig.update_layout(height=220,margin=dict(l=6,r=18,t=4,b=6),xaxis_title="Smoothed Delay Risk %",yaxis_title="Hour"); st.plotly_chart(fig,width='stretch')
+                fig=px.bar(rh.sort_values("SmoothedRisk"),x="SmoothedRisk",y="DEP_HOUR",orientation="h",text="SmoothedRisk"); fig.update_traces(marker_color="#0066CC",texttemplate="%{text:.1f}%",textposition="outside",width=.64); fig=apply_white_chart_theme(fig); fig.update_layout(height=175,margin=dict(l=4,r=8,t=2,b=4),xaxis_title="Smoothed Delay Risk %",yaxis_title="Hour"); st.plotly_chart(fig,width='stretch')
             with r2:
-                st.markdown("<div style='font-weight:700;color:#0F172A;font-size:.88rem;margin-bottom:3px;'>Carrier Reliability Confidence</div>", unsafe_allow_html=True)
+                st.markdown('<div class="deep-dive-chart-title">Carrier Reliability Confidence</div>', unsafe_allow_html=True)
                 ci=cs.copy(); z=1.96; ci["p"]=ci.OnTime/100; ci["se"]=np.sqrt((ci.p*(1-ci.p))/ci.Flights.clip(lower=1)); ci["Lower"]=(ci.p-z*ci.se).clip(lower=0)*100; ci["Upper"]=(ci.p+z*ci.se).clip(upper=1)*100; fig=go.Figure()
                 for _,row in ci.sort_values("OnTime").iterrows():
                     fig.add_trace(go.Scatter(x=[row.Lower,row.Upper],y=[row.Carrier,row.Carrier],mode="lines",line=dict(color="#94A3B8",width=6),showlegend=False)); fig.add_trace(go.Scatter(x=[row.OnTime],y=[row.Carrier],mode="markers",marker=dict(color="#0066CC",size=9),showlegend=False,hovertemplate=f"{row.Carrier}<br>On-time: {row.OnTime:.1f}%<br>Approx. 95% interval: {row.Lower:.1f}%–{row.Upper:.1f}%<extra></extra>"))
-                fig=apply_white_chart_theme(fig); fig.update_layout(height=220,margin=dict(l=6,r=6,t=4,b=6),xaxis_title="On-Time Arrival %",yaxis_title=""); st.plotly_chart(fig,width='stretch')
+                fig=apply_white_chart_theme(fig); fig.update_layout(height=175,margin=dict(l=4,r=4,t=2,b=4),xaxis_title="On-Time Arrival %",yaxis_title=""); st.plotly_chart(fig,width='stretch')
             with r3:
-                st.markdown("<div style='font-weight:700;color:#0F172A;font-size:.88rem;margin-bottom:3px;'>Cumulative Delay Concentration</div>", unsafe_allow_html=True)
+                st.markdown('<div class="deep-dive-chart-title">Cumulative Delay Concentration</div>', unsafe_allow_html=True)
                 pdly=route_df.loc[route_df.ARR_DELAY_NUM>0,"ARR_DELAY_NUM"].sort_values(ascending=False).reset_index(drop=True)
                 if len(pdly):
-                    cum=pdly.cumsum()/pdly.sum()*100; pdf=pd.DataFrame({"Rank":np.arange(1,len(cum)+1),"Cumulative":cum}); fig=px.line(pdf,x="Rank",y="Cumulative"); fig.add_hline(y=80,line_dash="dash",line_color="#D97706",annotation_text="80%"); fig=apply_white_chart_theme(fig); fig.update_traces(line_color="#0066CC",line_width=3); fig.update_layout(height=220,margin=dict(l=6,r=6,t=4,b=6),xaxis_title="Positive-delay flights ranked by severity",yaxis_title="Cumulative delay share (%)"); st.plotly_chart(fig,width='stretch')
+                    cum=pdly.cumsum()/pdly.sum()*100; pdf=pd.DataFrame({"Rank":np.arange(1,len(cum)+1),"Cumulative":cum}); fig=px.line(pdf,x="Rank",y="Cumulative"); fig.add_hline(y=80,line_dash="dash",line_color="#D97706",annotation_text="80%"); fig=apply_white_chart_theme(fig); fig.update_traces(line_color="#0066CC",line_width=3); fig.update_layout(height=175,margin=dict(l=4,r=4,t=2,b=4),xaxis_title="Positive-delay flights ranked by severity",yaxis_title="Cumulative delay share (%)"); st.plotly_chart(fig,width='stretch')
                 else: st.info("No positive arrival delays in the selected route/date range.")
 
