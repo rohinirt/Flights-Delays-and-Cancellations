@@ -521,9 +521,11 @@ st.markdown("""
     /* Keep navigation buttons full-width and distinct from the narrower filters. */
     section[data-testid="stSidebar"] .stButton > button {
         width: 100% !important;
-        min-height: 38px !important;
-        height: 38px !important;
-        line-height: 1.1 !important;
+        min-height: 34px !important;
+        height: 34px !important;
+        padding-top: 0.1rem !important;
+        padding-bottom: 0.1rem !important;
+        line-height: 1.05 !important;
     }
 
 
@@ -589,6 +591,23 @@ st.markdown("""
     section[data-testid="stSidebar"] [data-testid="stDateInput"] input,
     section[data-testid="stSidebar"] [data-baseweb="select"] input {
         -webkit-text-fill-color: #52657A !important;
+    }
+
+
+    /* Final navigation sizing override */
+    section[data-testid="stSidebar"] .stButton > button,
+    section[data-testid="stSidebar"] button[kind="secondary"],
+    section[data-testid="stSidebar"] button[kind="primary"] {
+        min-height: 34px !important;
+        height: 34px !important;
+        padding: 0.1rem 0.5rem !important;
+        line-height: 1.05 !important;
+    }
+
+    /* Main dashboard/page title: +2pt from the previous 1.55rem. */
+    .main h1, [data-testid="stAppViewContainer"] h1 {
+        font-size: 1.72rem !important;
+        line-height: 1.18 !important;
     }
 
 </style>
