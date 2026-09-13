@@ -526,6 +526,71 @@ st.markdown("""
         line-height: 1.1 !important;
     }
 
+
+    /* ===== SIDEBAR HEADER SPACING — FINAL ===== */
+    section[data-testid="stSidebar"] .sidebar-header-spacer {
+        display: block !important;
+        height: 16px !important;
+        min-height: 16px !important;
+        width: 100% !important;
+        clear: both !important;
+    }
+
+    section[data-testid="stSidebar"] .sidebar-header-fix {
+        position: relative !important;
+        display: block !important;
+        height: auto !important;
+        min-height: 54px !important;
+        overflow: visible !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    section[data-testid="stSidebar"] .sidebar-header-fix .sidebar-title {
+        position: relative !important;
+        display: block !important;
+        height: auto !important;
+        margin: 0 0 4px 0 !important;
+        padding: 0 !important;
+        font-size: 1.18rem !important;
+        line-height: 1.2 !important;
+        white-space: nowrap !important;
+        overflow: visible !important;
+    }
+
+    section[data-testid="stSidebar"] .sidebar-header-fix .sidebar-subtitle {
+        position: relative !important;
+        display: block !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        font-size: 0.74rem !important;
+        line-height: 1.25 !important;
+        white-space: nowrap !important;
+        overflow: visible !important;
+    }
+
+    /* Make the first nav button start after the explicit spacer. */
+    section[data-testid="stSidebar"] .sidebar-header-spacer + div {
+        margin-top: 0 !important;
+    }
+
+    /* Sidebar filters stay narrower than navigation buttons. */
+    section[data-testid="stSidebar"] [data-testid="stSelectbox"],
+    section[data-testid="stSidebar"] [data-testid="stMultiSelect"],
+    section[data-testid="stSidebar"] [data-testid="stDateInput"] {
+        width: 90% !important;
+        max-width: 90% !important;
+        margin-left: 0 !important;
+        margin-right: auto !important;
+    }
+
+    /* Better disabled/control text visibility on the dark sidebar. */
+    section[data-testid="stSidebar"] [data-testid="stDateInput"] input,
+    section[data-testid="stSidebar"] [data-baseweb="select"] input {
+        -webkit-text-fill-color: #52657A !important;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -958,6 +1023,14 @@ st.sidebar.markdown(
     '<div class="sidebar-title">ORD Flight Operations</div>'
     '<div class="sidebar-subtitle">Chicago O&#39;Hare International Airport</div>'
     '</div>',
+    unsafe_allow_html=True
+)
+
+# Explicit vertical spacer: Streamlit's sidebar button container can collapse
+# the visual margin below custom HTML. This guarantees the airport subtitle
+# cannot sit underneath the first navigation button.
+st.sidebar.markdown(
+    '<div class="sidebar-header-spacer"></div>',
     unsafe_allow_html=True
 )
 
