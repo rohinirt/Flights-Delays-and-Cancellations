@@ -530,8 +530,8 @@ st.markdown("""
     /* ===== SIDEBAR HEADER SPACING — FINAL ===== */
     section[data-testid="stSidebar"] .sidebar-header-spacer {
         display: block !important;
-        height: 16px !important;
-        min-height: 16px !important;
+        height: 24px !important;
+        min-height: 24px !important;
         width: 100% !important;
         clear: both !important;
     }
