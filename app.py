@@ -244,7 +244,7 @@ st.markdown("""
 
     /* FINAL UI POLISH */
     .block-container {
-        padding-top: 1.05rem !important;
+        padding-top: 2.75rem !important;
     }
     .main h1, [data-testid="stAppViewContainer"] h1 {
         font-size: 1.55rem !important;
@@ -381,6 +381,65 @@ st.markdown("""
         font-size: 0.9rem !important;
         line-height: 1.15 !important;
         margin: 0 0 2px 0 !important;
+        padding: 0 !important;
+    }
+
+
+    /* Sidebar header: prevent the title and airport subtitle from colliding. */
+    section[data-testid="stSidebar"] h1 {
+        font-size: 1.18rem !important;
+        line-height: 1.25 !important;
+        margin: 0 0 0.45rem 0 !important;
+        padding: 0 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+        margin-top: 0 !important;
+        margin-bottom: 0.55rem !important;
+        line-height: 1.2 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
+        margin: 0 !important;
+        line-height: 1.2 !important;
+    }
+
+    /* Keep navigation visually compact without crushing the text. */
+    section[data-testid="stSidebar"] .stButton {
+        margin-top: 0 !important;
+        margin-bottom: 0.15rem !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button,
+    section[data-testid="stSidebar"] button[kind="secondary"],
+    section[data-testid="stSidebar"] button[kind="primary"] {
+        min-height: 38px !important;
+        height: 38px !important;
+        padding: 0.2rem 0.55rem !important;
+        line-height: 1.1 !important;
+    }
+
+    /* Give the Filters heading a little breathing room after navigation. */
+    section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] hr {
+        margin: 0.2rem 0 0.35rem 0 !important;
+    }
+    section[data-testid="stSidebar"] h3 {
+        margin-top: 0.1rem !important;
+        margin-bottom: 0.3rem !important;
+        line-height: 1.15 !important;
+    }
+
+
+    /* Route Performance & Risk (4th page) chart titles: +4pt. */
+    .deep-dive-chart-title {
+        font-size: 1.05rem !important;
+        font-weight: 700 !important;
+        line-height: 1.15 !important;
+        margin: 0 0 2px 0 !important;
+        padding: 0 !important;
+        color: #0F172A !important;
+    }
+    .advanced-risk-title {
+        font-size: 1.05rem !important;
+        line-height: 1.15 !important;
+        margin: 0 0 3px 0 !important;
         padding: 0 !important;
     }
 
